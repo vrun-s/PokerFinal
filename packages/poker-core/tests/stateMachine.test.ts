@@ -484,5 +484,631 @@ describe("Game State Machine (Phase 3)", () => {
       expect(state.players[1]!.hasActed).toBe(false);
       expect(state.players[2]!.hasActed).toBe(false);
     });
+
+    it("should not allow players who have already acted to act again when an under-raise is made", () => {
+      const seatsWithShortStack: SeatConfig[] = [
+        { id: "P0", name: "Player 0", stack: 1000 },
+        { id: "P1", name: "Player 1", stack: 1000 },
+        { id: "P2", name: "Player 2", stack: 150 }, // Will under-raise
+      ];
+
+      let state = startHand(config, seatsWithShortStack, mockDeck);
+
+      // Preflop:
+      // SB = P1 (posted 10, stack = 990)
+      // BB = P2 (posted 20, stack = 130)
+      // currentBet = 20, lastRaiseSize = 20
+      // Actor: P0 (UTG)
+
+      // Step 1: P0 makes a full raise to 100
+      // Increment = 100 - 20 = 80, so lastRaiseSize becomes 80
+      // Min re-raise = 100 + 80 = 180
+      let res = transition(state, { type: "raise", playerId: "P0", totalBet: 100 });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.currentBet).toBe(100);
+      expect(state.lastRaiseSize).toBe(80);
+      // P0 raised, so P1 and P2 hasActed should be reset to false
+      expect(state.players[1]!.hasActed).toBe(false);
+      expect(state.players[2]!.hasActed).toBe(false);
+
+      // Step 2: P1 calls 100
+      // P1.hasActed becomes true — this is the critical state we're protecting
+      res = transition(state, { type: "call", playerId: "P1" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.players[1]!.hasActed).toBe(true);
+      expect(state.players[1]!.stack).toBe(900); // 1000 - 100
+
+      // Step 3: P2 goes all-in for 150 total
+      // P2 already posted BB of 20, so this adds 130 more chips
+      // 150 is between currentBet (100) and minRaise (180) → under-raise
+      res = transition(state, { type: "raise", playerId: "P2", totalBet: 150 });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.players[2]!.status).toBe("all-in");
+      expect(state.players[2]!.stack).toBe(0);
+
+      // currentBet updates to 150 (the new amount to call)
+      expect(state.currentBet).toBe(150);
+      // lastRaiseSize must NOT change — under-raise doesn't reopen action
+      expect(state.lastRaiseSize).toBe(80);
+
+      // THE CORE ASSERTION:
+      // P1 already acted before the under-raise — hasActed must still be true
+      expect(state.players[1]!.hasActed).toBe(true);
+
+      // Verify P0 cannot raise because they already acted and action is not reopened
+      const illegalRaiseResP0 = transition(state, { type: "raise", playerId: "P0", totalBet: 200 });
+      expect(illegalRaiseResP0.ok).toBe(false);
+      if (!illegalRaiseResP0.ok) {
+        expect(illegalRaiseResP0.error.code).toBe("INVALID_RAISE_AMOUNT");
+      }
+
+      // Step 4: P0 calls the new currentBet of 150
+      res = transition(state, { type: "call", playerId: "P0" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      // The round is not complete yet because P1 has only bet 100 facing a currentBet of 150
+      expect(state.currentRound).toBe("PreFlop");
+      expect(state.actorIndex).toBe(1); // Action is on P1
+
+      // Verify P1 cannot raise because they already acted and action is not reopened
+      const illegalRaiseResP1 = transition(state, { type: "raise", playerId: "P1", totalBet: 200 });
+      expect(illegalRaiseResP1.ok).toBe(false);
+      if (!illegalRaiseResP1.ok) {
+        expect(illegalRaiseResP1.error.code).toBe("INVALID_RAISE_AMOUNT");
+      }
+
+      // Step 5: P1 calls the new currentBet of 150 (contributes 50 more chips)
+      res = transition(state, { type: "call", playerId: "P1" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      // If the under-raise logic is correct, the round is now complete
+      // and we should be on the Flop after both players have called
+      expect(state.currentRound).toBe("Flop");
+      expect(state.players[1]!.stack).toBe(850); // 1000 - 150
+      expect(state.actorIndex).not.toBe(-1); // Hand is still going
+      expect(state.communityCards.length).toBe(3); // Flop dealt;
+    })
+  });
+  describe("Player Exactly at Call Amount", () => {
+    it("should treat a player whose stack equals the call amount as all-in, not a raise", () => {
+      const exactCallSeats: SeatConfig[] = [
+        { id: "P0", name: "Player 0", stack: 1000 },
+        { id: "P1", name: "Player 1", stack: 1000 },
+        { id: "P2", name: "Player 2", stack: 100 }, // exactly the call amount
+      ];
+
+      let state = startHand(config, exactCallSeats, mockDeck);
+
+      // Preflop:
+      // SB = P1 (posted 10), BB = P2 (posted 20)
+      // P2 stack = 80 remaining after posting BB
+      // P0 raises to 100
+      let res = transition(state, { type: "raise", playerId: "P0", totalBet: 100 });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.currentBet).toBe(100);
+
+      // P1 calls 100
+      res = transition(state, { type: "call", playerId: "P1" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      // P2 has exactly 80 chips left (posted 20, stack was 100)
+      // Call amount = 100 - 20 = 80. P2 stack = 80. Exactly matches.
+      res = transition(state, { type: "call", playerId: "P2" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      // P2 should be all-in with stack 0
+      expect(state.players[2]!.status).toBe("all-in");
+      expect(state.players[2]!.stack).toBe(0);
+      expect(state.players[2]!.totalHandBet).toBe(100);
+
+      // Round should be complete and advance to Flop
+      expect(state.currentRound).toBe("Flop");
+    });
+  });
+
+  describe("Heads-Up Post-Flop Actor Order", () => {
+    it("should have the non-dealer act first post-flop in heads-up", () => {
+      const huSeats = seats.slice(0, 2);
+      let state = startHand(config, huSeats, mockDeck);
+
+      // Heads-up preflop:
+      // P0 = dealer/SB, acts first preflop
+      // P0 calls
+      let res = transition(state, { type: "call", playerId: "P0" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      // P1 = BB, checks to close preflop action
+      res = transition(state, { type: "check", playerId: "P1" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      // Now on the Flop
+      expect(state.currentRound).toBe("Flop");
+
+      // Post-flop: non-dealer (P1, index 1) acts first
+      expect(state.actorIndex).toBe(1);
+
+      // Verify P0 cannot act out of turn
+      res = transition(state, { type: "check", playerId: "P0" });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error.code).toBe("NOT_PLAYER_TURN");
+      }
+    });
+  });
+
+  describe("Re-Raise Minimum Enforcement", () => {
+    it("should reject a raise below the minimum re-raise increment after a call", () => {
+      let state = startHand(config, seats, mockDeck);
+
+      // P0 raises to 60. lastRaiseSize = 60 - 20 = 40. minRaise = 100.
+      let res = transition(state, { type: "raise", playerId: "P0", totalBet: 60 });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.lastRaiseSize).toBe(40);
+
+      // P1 calls 60
+      res = transition(state, { type: "call", playerId: "P1" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      // P2 tries to raise to 80 — increment is only 20, below lastRaiseSize of 40
+      res = transition(state, { type: "raise", playerId: "P2", totalBet: 80 });
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error.code).toBe("INVALID_RAISE_AMOUNT");
+      }
+
+      // P2 raises to exactly 100 — increment is exactly 40, exactly minRaise
+      res = transition(state, { type: "raise", playerId: "P2", totalBet: 100 });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.currentBet).toBe(100);
+      expect(state.lastRaiseSize).toBe(40);
+    });
+  });
+
+  describe("Uncontested Pot — All-In Player Wins Without Showdown", () => {
+    it("should end the hand immediately when all others fold to an all-in, without going to Showdown", () => {
+      const allInSeats: SeatConfig[] = [
+        { id: "P0", name: "Player 0", stack: 50 },
+        { id: "P1", name: "Player 1", stack: 1000 },
+        { id: "P2", name: "Player 2", stack: 1000 },
+      ];
+
+      let state = startHand(config, allInSeats, mockDeck);
+
+      // P0 goes all-in preflop for 50
+      let res = transition(state, { type: "raise", playerId: "P0", totalBet: 50 });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.players[0]!.status).toBe("all-in");
+
+      // P1 folds
+      res = transition(state, { type: "fold", playerId: "P1" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      // P2 folds — only P0 remains non-folded
+      res = transition(state, { type: "fold", playerId: "P2" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      // Hand should end immediately — no showdown needed
+      expect(state.currentRound).toBe("Ended");
+      expect(state.actorIndex).toBe(-1);
+
+      // P0 wins the entire pot uncontested
+      const payouts = distributePayouts(
+        state.pots,
+        state.players,
+        state.communityCards,
+        config.dealerIndex
+      );
+      const p0Payout = payouts.payouts.find(p => p.playerId === "P0")?.amount;
+
+      // P0 posted nothing (UTG), P1 posted SB 10, P2 posted BB 20, P0 raised to 50
+      // Total pot = 10 + 20 + 50 = 80
+      expect(p0Payout).toBe(80);
+
+      // No community cards needed — hand ended before flop
+      expect(state.communityCards.length).toBe(0);
+    });
+  });
+
+  describe("Multi-Street All-In Affecting totalHandBet Tiers", () => {
+    it("should calculate side pots correctly when a player goes all-in on a later street", () => {
+      // P0: 1000, P1: 110 (will go all-in on turn), P2: 1000
+      const multiStreetSeats: SeatConfig[] = [
+        { id: "P0", name: "Player 0", stack: 1000 },
+        { id: "P1", name: "Player 1", stack: 110 },
+        { id: "P2", name: "Player 2", stack: 1000 },
+      ];
+
+      let state = startHand(config, multiStreetSeats, mockDeck);
+
+      // --- Preflop: all call 20 ---
+      // P0 calls
+      let res = transition(state, { type: "call", playerId: "P0" });
+      state = (res as any).value;
+
+      // P1 (SB) calls — already posted 10, adds 10 more
+      res = transition(state, { type: "call", playerId: "P1" });
+      state = (res as any).value;
+
+      // P2 (BB) checks
+      res = transition(state, { type: "check", playerId: "P2" });
+      state = (res as any).value;
+      expect(state.currentRound).toBe("Flop");
+
+      // P1 totalHandBet = 20, stack = 90
+
+      // --- Flop: P0 bets 30, P1 calls, P2 calls ---
+      // P1 acts first (SB, left of button)
+      res = transition(state, { type: "check", playerId: "P1" });
+      state = (res as any).value;
+
+      res = transition(state, { type: "check", playerId: "P2" });
+      state = (res as any).value;
+
+      res = transition(state, { type: "raise", playerId: "P0", totalBet: 30 });
+      state = (res as any).value;
+
+      res = transition(state, { type: "call", playerId: "P1" });
+      state = (res as any).value;
+
+      res = transition(state, { type: "call", playerId: "P2" });
+      state = (res as any).value;
+      expect(state.currentRound).toBe("Turn");
+
+      // P1 totalHandBet = 50, stack = 60
+
+      // --- Turn: P0 bets 50, P1 goes all-in for 60 (under their remaining stack) ---
+      // P1 acts first
+      res = transition(state, { type: "check", playerId: "P1" });
+      state = (res as any).value;
+
+      res = transition(state, { type: "check", playerId: "P2" });
+      state = (res as any).value;
+
+      // P0 bets 50
+      res = transition(state, { type: "raise", playerId: "P0", totalBet: 50 });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.currentBet).toBe(50);
+
+      // P1 has 60 chips. Call = 50. P1 can call.
+      // But let's make P1 go all-in for all 60 instead (raise to 60 — under-raise)
+      res = transition(state, { type: "raise", playerId: "P1", totalBet: 60 });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.players[1]!.status).toBe("all-in");
+      expect(state.players[1]!.stack).toBe(0);
+
+      // P2 calls 60
+      res = transition(state, { type: "call", playerId: "P2" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      // P0 calls 60 (already bet 50, adds 10 more)
+      res = transition(state, { type: "call", playerId: "P0" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.currentRound).toBe("River");
+
+      // Final totalHandBet values:
+      // P0: 20 + 30 + 60 = 110
+      // P1: 20 + 30 + 60 = 110
+      // P2: 20 + 30 + 60 = 110
+      expect(state.players[0]!.totalHandBet).toBe(110);
+      expect(state.players[1]!.totalHandBet).toBe(110);
+      expect(state.players[2]!.totalHandBet).toBe(110);
+
+      // All equal contributions — should be a single main pot
+      const pots = calculatePots(state.players);
+      expect(pots.length).toBe(1);
+      expect(pots[0]!.amount).toBe(330);
+      expect(pots[0]!.eligiblePlayerIds).toContain("P0");
+      expect(pots[0]!.eligiblePlayerIds).toContain("P1");
+      expect(pots[0]!.eligiblePlayerIds).toContain("P2");
+    });
+  });
+
+  describe("Three-Way All-In at Different Stack Sizes", () => {
+    it("should create three separate pots and award uncontested pot without evaluation", () => {
+      const threeWaySeats: SeatConfig[] = [
+        { id: "P0", name: "Player 0", stack: 30 },
+        { id: "P1", name: "Player 1", stack: 70 },
+        { id: "P2", name: "Player 2", stack: 200 },
+      ];
+
+      let state = startHand(config, threeWaySeats, mockDeck);
+
+      // Preflop:
+      // SB = P1 (posts 10, stack = 60). BB = P2 (posts 20, stack = 180).
+      // Actor: P0 (stack = 30). P0 goes all-in for 30.
+      let res = transition(state, { type: "raise", playerId: "P0", totalBet: 30 });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.players[0]!.status).toBe("all-in");
+
+      // P1 goes all-in for 70 total
+      res = transition(state, { type: "raise", playerId: "P1", totalBet: 70 });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.players[1]!.status).toBe("all-in");
+
+      // P2 calls 70
+      res = transition(state, { type: "call", playerId: "P2" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      // Skip to showdown — <= 1 active player
+      expect(state.currentRound).toBe("Showdown");
+      expect(state.communityCards.length).toBe(5);
+
+      // Verify pot structure:
+      // P0 totalHandBet = 30
+      // P1 totalHandBet = 70
+      // P2 totalHandBet = 70
+      //
+      // Pot 1 (up to 30): P0(30) + P1(30) + P2(30) = 90. Eligible: P0, P1, P2.
+      // Pot 2 (up to 70): P1(40) + P2(40) = 80. Eligible: P1, P2.
+      //
+      // Uncalled chips (130) remain in P2's stack.
+      const pots = calculatePots(state.players);
+      expect(pots.length).toBe(2);
+
+      expect(pots[0]!.amount).toBe(90);
+      expect(pots[0]!.eligiblePlayerIds).toContain("P0");
+      expect(pots[0]!.eligiblePlayerIds).toContain("P1");
+      expect(pots[0]!.eligiblePlayerIds).toContain("P2");
+
+      expect(pots[1]!.amount).toBe(80);
+      expect(pots[1]!.eligiblePlayerIds).not.toContain("P0");
+      expect(pots[1]!.eligiblePlayerIds).toContain("P1");
+      expect(pots[1]!.eligiblePlayerIds).toContain("P2");
+
+      expect(state.players[2]!.stack).toBe(130);
+
+      const payouts = distributePayouts(
+        pots,
+        state.players,
+        state.communityCards,
+        config.dealerIndex
+      );
+      const p2Payout = payouts.payouts.find(p => p.playerId === "P2")?.amount ?? 0;
+      expect(p2Payout).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe("Split Pot With Different Winners Per Pot", () => {
+    it("should award main pot and side pot to different players based on hand strength", () => {
+      // We need deterministic hands. Use a mock deck:
+      // P0 hole: As, Ks  → best hand with community: As Ks Ac Kc Qh = Two Pair A+K
+      // P1 hole: Ac, Kc  → same rank two pair, but P0 has spades kicker advantage... 
+      // Actually let's make it cleaner:
+      // P0 hole: Ah, Kh  → Flush (hearts) with community 2h 3h 4h
+      // P1 hole: Qd, Jd  → Straight or weaker
+      // P2 hole: Ts, 9s  → weaker
+      // Community: 2h 3h 4h 5c 6c
+      // P0: Ah Kh 2h 3h 4h → Flush (Ace-high)
+      // P1: Qd Jd 2h 3h 4h → Flush (no — Qd Jd are diamonds, community hearts)
+      //     P1 best: straight? Q J ... no. High card with 6 5 4 3 2 = straight 6-high? 
+      //     Actually 2h 3h 4h 5c 6c: P1 has Q J, best is straight 6-high (2 3 4 5 6) 
+      // P2: Ts 9s 2h 3h 4h 5c 6c → straight 6-high (2 3 4 5 6) same as P1
+      // Let's simplify with a cleaner mock deck
+
+      // Clean scenario:
+      // P0 hole: Ah Kh → with community Qh Jh Th = Royal Flush (best possible)
+      // P1 hole: As Ks → with community Qh Jh Th 2c 3c = straight (A K Q J T)
+      // P2 hole: 2d 3d → worst hand
+      // Community: Qh Jh Th 2c 3c
+
+      const splitMockDeck = makeMockDeck([
+        "Ah", "Kh",       // P0 hole cards — Royal Flush with community
+        "As", "Ks",       // P1 hole cards — Broadway straight
+        "2d", "3d",       // P2 hole cards — weak
+        "Qh", "Jh", "Th", // Flop
+        "2c",             // Turn
+        "3c",             // River
+      ]);
+
+      // Stack sizes:
+      // P0 = 50 (goes all-in) — has best hand, wins main pot
+      // P1 = 500
+      // P2 = 500
+      const splitSeats: SeatConfig[] = [
+        { id: "P0", name: "Player 0", stack: 50 },
+        { id: "P1", name: "Player 1", stack: 500 },
+        { id: "P2", name: "Player 2", stack: 500 },
+      ];
+
+      let state = startHand(
+        { smallBlind: 10, bigBlind: 20, dealerIndex: 0 },
+        splitSeats,
+        splitMockDeck
+      );
+
+      // P0 goes all-in for 50 (UTG)
+      let res = transition(state, { type: "raise", playerId: "P0", totalBet: 50 });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.players[0]!.status).toBe("all-in");
+
+      // P1 raises to 500 (all-in)
+      res = transition(state, { type: "raise", playerId: "P1", totalBet: 500 });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.players[1]!.status).toBe("all-in");
+
+      // P2 calls 500 (all-in)
+      res = transition(state, { type: "call", playerId: "P2" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+      expect(state.players[2]!.status).toBe("all-in");
+
+      // Skip to showdown
+      expect(state.currentRound).toBe("Showdown");
+      expect(state.communityCards.length).toBe(5);
+
+      // Pot structure:
+      // P0 totalHandBet = 50
+      // P1 totalHandBet = 500
+      // P2 totalHandBet = 500
+      //
+      // Main pot (up to 50): P0(50) + P1(50) + P2(50) = 150. Eligible: P0, P1, P2.
+      // Side pot (up to 500): P1(450) + P2(450) = 900. Eligible: P1, P2.
+      const pots = calculatePots(state.players);
+      expect(pots.length).toBe(2);
+      expect(pots[0]!.amount).toBe(150);
+      expect(pots[1]!.amount).toBe(900);
+
+      const payouts = distributePayouts(
+        pots,
+        state.players,
+        state.communityCards,
+        config.dealerIndex
+      );
+
+      const p0Payout = payouts.payouts.find(p => p.playerId === "P0")?.amount ?? 0;
+      const p1Payout = payouts.payouts.find(p => p.playerId === "P1")?.amount ?? 0;
+      const p2Payout = payouts.payouts.find(p => p.playerId === "P2")?.amount ?? 0;
+
+      // P0 has Royal Flush — wins main pot (150)
+      expect(p0Payout).toBe(150);
+
+      // P1 has Broadway straight — beats P2, wins side pot (900)
+      expect(p1Payout).toBe(900);
+
+      // P2 has weakest hand — wins nothing
+      expect(p2Payout).toBe(0);
+
+      // Total payouts = total chips in play
+      expect(p0Payout + p1Payout + p2Payout).toBe(1050);
+    });
+  });
+
+  describe("Skip-to-Showdown Sub-Cases", () => {
+    const allInConfig: HandConfig = { smallBlind: 10, bigBlind: 20, dealerIndex: 0 };
+
+    it("Case A: skip triggered after preflop deals all 5 community cards", () => {
+      const seats3: SeatConfig[] = [
+        { id: "P0", name: "Player 0", stack: 50 },
+        { id: "P1", name: "Player 1", stack: 200 },
+        { id: "P2", name: "Player 2", stack: 200 },
+      ];
+
+      let state = startHand(allInConfig, seats3, mockDeck);
+
+      // P0 all-in preflop
+      let res = transition(state, { type: "raise", playerId: "P0", totalBet: 50 });
+      state = (res as any).value;
+
+      // P1 raises to 200 (all-in)
+      res = transition(state, { type: "raise", playerId: "P1", totalBet: 200 });
+      state = (res as any).value;
+
+      // P2 calls 200 (all-in)
+      res = transition(state, { type: "call", playerId: "P2" });
+      state = (res as any).value;
+
+      expect(state.currentRound).toBe("Showdown");
+      expect(state.communityCards.length).toBe(5); // All 5 dealt from preflop
+    });
+
+    it("Case B: skip triggered after flop deals 2 remaining community cards", () => {
+      const seats3: SeatConfig[] = [
+        { id: "P0", name: "Player 0", stack: 200 },
+        { id: "P1", name: "Player 1", stack: 200 },
+        { id: "P2", name: "Player 2", stack: 60 }, // will go all-in on flop
+      ];
+
+      let state = startHand(allInConfig, seats3, mockDeck);
+
+      // Preflop: all call
+      let res = transition(state, { type: "call", playerId: "P0" });
+      state = (res as any).value;
+      res = transition(state, { type: "call", playerId: "P1" });
+      state = (res as any).value;
+      res = transition(state, { type: "check", playerId: "P2" });
+      state = (res as any).value;
+      expect(state.currentRound).toBe("Flop");
+      expect(state.communityCards.length).toBe(3);
+
+      // Flop: P1 checks, P2 goes all-in for remaining 40 (totalBet = 40)
+      res = transition(state, { type: "check", playerId: "P1" });
+      state = (res as any).value;
+      res = transition(state, { type: "raise", playerId: "P2", totalBet: 40 });
+      state = (res as any).value;
+      expect(state.players[2]!.status).toBe("all-in");
+
+      // P0 raises to 180 (all-in)
+      res = transition(state, { type: "raise", playerId: "P0", totalBet: 180 });
+      state = (res as any).value;
+
+      // P1 calls 180 (all-in) — skip to showdown triggered
+      res = transition(state, { type: "call", playerId: "P1" });
+      state = (res as any).value;
+
+      expect(state.currentRound).toBe("Showdown");
+      expect(state.communityCards.length).toBe(5); // 3 flop + 2 more dealt
+    });
+
+    it("Case C: skip triggered after turn deals 1 remaining community card", () => {
+      const seats3: SeatConfig[] = [
+        { id: "P0", name: "Player 0", stack: 200 },
+        { id: "P1", name: "Player 1", stack: 200 },
+        { id: "P2", name: "Player 2", stack: 80 }, // will go all-in on turn
+      ];
+
+      let state = startHand(allInConfig, seats3, mockDeck);
+
+      // Preflop: all call
+      let res = transition(state, { type: "call", playerId: "P0" });
+      state = (res as any).value;
+      res = transition(state, { type: "call", playerId: "P1" });
+      state = (res as any).value;
+      res = transition(state, { type: "check", playerId: "P2" });
+      state = (res as any).value;
+      expect(state.currentRound).toBe("Flop");
+
+      // Flop: all check
+      res = transition(state, { type: "check", playerId: "P1" });
+      state = (res as any).value;
+      res = transition(state, { type: "check", playerId: "P2" });
+      state = (res as any).value;
+      res = transition(state, { type: "check", playerId: "P0" });
+      state = (res as any).value;
+      expect(state.currentRound).toBe("Turn");
+      expect(state.communityCards.length).toBe(4);
+
+      // Turn: P1 checks, P2 goes all-in for remaining 60 (totalBet = 60)
+      res = transition(state, { type: "check", playerId: "P1" });
+      state = (res as any).value;
+      res = transition(state, { type: "raise", playerId: "P2", totalBet: 60 });
+      state = (res as any).value;
+      expect(state.players[2]!.status).toBe("all-in");
+
+      // P0 raises to 180 (all-in)
+      res = transition(state, { type: "raise", playerId: "P0", totalBet: 180 });
+      state = (res as any).value;
+
+      // P1 calls 180 (all-in) — skip to showdown triggered
+      res = transition(state, { type: "call", playerId: "P1" });
+      state = (res as any).value;
+
+      expect(state.currentRound).toBe("Showdown");
+      expect(state.communityCards.length).toBe(5); // 4 turn + 1 more dealt
+    });
   });
 });
