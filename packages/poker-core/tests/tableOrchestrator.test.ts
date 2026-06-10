@@ -110,7 +110,8 @@ describe("Table Orchestrator (Phase 4)", () => {
 
   describe("Busted Player Eviction", () => {
     it("should automatically evict players with stack === 0 at hand boundary", () => {
-      let table = createTable(config);
+      const customConfig = { ...config, minBuyIn: 10 };
+      let table = createTable(customConfig);
       // Alice joins with very short stack (10), BB is 20, SB is 10
       table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 10, seatIndex: 0 });
       table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 1000, seatIndex: 1 });
@@ -372,6 +373,238 @@ describe("Table Orchestrator (Phase 4)", () => {
       // P0 should be seated at Seat 2
       expect(table.seats[2]!.status).toBe("occupied");
       expect(table.seats[2]!.playerId).toBe("P0");
+    });
+  });
+
+  describe("sitOut / sitIn Action Coverage", () => {
+    it("should allow a player to sit out immediately (mid-hand)", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 1000, seatIndex: 0 });
+      table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 1000, seatIndex: 1 });
+      table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
+
+      expect(table.seats[0]!.status).toBe("occupied");
+
+      // Sit out mid-hand
+      table = tableReducer(table, { type: "sitOut", playerId: "P0" });
+      expect(table.seats[0]!.status).toBe("sitting-out");
+      expect(table.currentHandState).not.toBeNull(); // Alice is still in the active hand
+    });
+
+    it("should set mustWaitForBB to true when sitting back in", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 1000, seatIndex: 0 });
+      table = tableReducer(table, { type: "sitOut", playerId: "P0" });
+      expect(table.seats[0]!.status).toBe("sitting-out");
+
+      table = tableReducer(table, { type: "sitIn", playerId: "P0" });
+      expect(table.seats[0]!.status).toBe("occupied");
+      expect(table.seats[0]!.mustWaitForBB).toBe(true);
+    });
+
+    it("should skip sitting-out players when starting next hand", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 1000, seatIndex: 0 });
+      table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 1000, seatIndex: 1 });
+      table = tableReducer(table, { type: "joinTable", playerId: "P2", name: "Carol", buyIn: 1000, seatIndex: 2 });
+      
+      // Alice sits out
+      table = tableReducer(table, { type: "sitOut", playerId: "P0" });
+      
+      // Start hand
+      table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
+      // Hand should have 2 active players: Bob and Carol. Alice (P0) is not dealt in.
+      expect(table.currentHandState!.players.length).toBe(2);
+      expect(table.currentHandState!.players.map(p => p.id)).not.toContain("P0");
+    });
+
+    it("should not start a hand if only one player is active (others sitting out)", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 1000, seatIndex: 0 });
+      table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 1000, seatIndex: 1 });
+      
+      // Alice sits out
+      table = tableReducer(table, { type: "sitOut", playerId: "P0" });
+      
+      table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
+      expect(table.currentHandState).toBeNull();
+    });
+  });
+
+  describe("addChips Action Coverage", () => {
+    it("should add chips immediately when table is idle", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 500, seatIndex: 0 });
+      table = tableReducer(table, { type: "addChips", playerId: "P0", amount: 200 });
+      expect(table.seats[0]!.stack).toBe(700);
+    });
+
+    it("should add chips immediately to the seat stack mid-hand without affecting active hand stack", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 500, seatIndex: 0 });
+      table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 500, seatIndex: 1 });
+      table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
+
+      expect(table.seats[0]!.stack).toBe(500);
+      expect(table.currentHandState!.players[0]!.stack).toBe(490); // posted 10 SB
+
+      // Add chips mid-hand
+      table = tableReducer(table, { type: "addChips", playerId: "P0", amount: 300 });
+      expect(table.seats[0]!.stack).toBe(800); // reflects on seat stack immediately
+      expect(table.currentHandState!.players[0]!.stack).toBe(490); // active hand stack remains unchanged
+    });
+
+    it("should no-op if adding chips to a non-seated player", () => {
+      let table = createTable(config);
+      const stateBefore = JSON.stringify(table);
+      table = tableReducer(table, { type: "addChips", playerId: "nonexistent", amount: 500 });
+      expect(JSON.stringify(table)).toBe(stateBefore);
+    });
+  });
+
+  describe("joinTable & leaveTable Edge Cases", () => {
+    it("should reject joining an already occupied seat", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 500, seatIndex: 0 });
+      const stateBefore = JSON.stringify(table);
+      table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 500, seatIndex: 0 });
+      expect(JSON.stringify(table)).toBe(stateBefore);
+    });
+
+    it("should reject a player joining twice", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 500, seatIndex: 0 });
+      const stateBefore = JSON.stringify(table);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 500, seatIndex: 1 });
+      expect(JSON.stringify(table)).toBe(stateBefore);
+    });
+
+    it("should reject joins with buy-ins outside limits", () => {
+      let table = createTable(config);
+      // Min is 100, max is 1000
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 50, seatIndex: 0 });
+      expect(table.seats[0]!.status).toBe("empty");
+
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 2000, seatIndex: 0 });
+      expect(table.seats[0]!.status).toBe("empty");
+    });
+
+    it("should no-op if a non-existent player tries to leave", () => {
+      let table = createTable(config);
+      const stateBefore = JSON.stringify(table);
+      table = tableReducer(table, { type: "leaveTable", playerId: "P99" });
+      expect(JSON.stringify(table)).toBe(stateBefore);
+    });
+  });
+
+  describe("Chip Conservation Invariant", () => {
+    it("should strictly conserve chips across all hand actions and boundaries", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 500, seatIndex: 0 });
+      table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 500, seatIndex: 1 });
+      
+      const startingChips = 1000;
+      expect(table.seats.reduce((sum, s) => sum + s.stack, 0)).toBe(startingChips);
+
+      // Start Hand 1: Alice (Dealer) posts SB 10, Bob posts BB 20.
+      table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
+      
+      // Helper to count chips currently in the system
+      const getSystemChips = (t: typeof table) => {
+        if (!t.currentHandState) return t.seats.reduce((sum, s) => sum + s.stack, 0);
+        const h = t.currentHandState;
+        const activeHandChips = h.players.reduce((sum, p) => sum + p.stack + p.totalHandBet, 0);
+        const nonParticipatingChips = t.seats
+          .filter(s => s.playerId !== null && !h.players.some(p => p.id === s.playerId))
+          .reduce((sum, s) => sum + s.stack, 0);
+        return activeHandChips + nonParticipatingChips;
+      };
+
+      expect(getSystemChips(table)).toBe(startingChips);
+
+      // Alice calls 20
+      table = tableReducer(table, { type: "dispatchHandAction", action: { type: "call", playerId: "P0" } });
+      expect(getSystemChips(table)).toBe(startingChips);
+
+      // Bob checks BB
+      table = tableReducer(table, { type: "dispatchHandAction", action: { type: "check", playerId: "P1" } });
+      expect(getSystemChips(table)).toBe(startingChips);
+
+      // Flop check through
+      table = tableReducer(table, { type: "dispatchHandAction", action: { type: "check", playerId: "P1" } });
+      table = tableReducer(table, { type: "dispatchHandAction", action: { type: "check", playerId: "P0" } });
+      expect(getSystemChips(table)).toBe(startingChips);
+
+      // Turn: P1 checks, P0 raises 100 (bet)
+      table = tableReducer(table, { type: "dispatchHandAction", action: { type: "check", playerId: "P1" } });
+      table = tableReducer(table, { type: "dispatchHandAction", action: { type: "raise", playerId: "P0", totalBet: 100 } });
+      expect(getSystemChips(table)).toBe(startingChips);
+
+      // P1 folds
+      table = tableReducer(table, { type: "dispatchHandAction", action: { type: "fold", playerId: "P1" } });
+      expect(getSystemChips(table)).toBe(startingChips);
+      expect(table.currentHandState!.currentRound).toBe("Ended");
+
+      // Start next hand: applying payouts and starting next hand
+      table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
+      expect(table.seats.reduce((sum, s) => sum + s.stack, 0)).toBe(startingChips);
+      expect(getSystemChips(table)).toBe(startingChips);
+    });
+  });
+
+  describe("dispatchHandAction with no active hand", () => {
+    it("should ignore hand actions when no hand is in progress", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 500, seatIndex: 0 });
+      const stateBefore = JSON.stringify(table);
+      table = tableReducer(table, { type: "dispatchHandAction", action: { type: "fold", playerId: "P0" } });
+      expect(JSON.stringify(table)).toBe(stateBefore);
+    });
+  });
+
+  describe("Heads-up Blind Rotation Across Multiple Hands", () => {
+    it("should swap SB and BB roles between the two players on consecutive hands", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 1000, seatIndex: 0 });
+      table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 1000, seatIndex: 1 });
+
+      // Hand 1: dealerIndex = 0.
+      // Heads-up: Dealer (P0) is SB. Bob (P1) is BB.
+      table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
+      expect(table.currentHandState!.config.dealerIndex).toBe(0); // Alice (P0) is dealer/SB
+      expect(table.currentHandState!.players[0]!.id).toBe("P0"); // P0 is SB
+      expect(table.currentHandState!.players[1]!.id).toBe("P1"); // P1 is BB
+      
+      // End Hand 1
+      table = tableReducer(table, { type: "dispatchHandAction", action: { type: "fold", playerId: "P0" } });
+      expect(table.currentHandState!.currentRound).toBe("Ended");
+
+      // Hand 2: button rotates 0 -> 1.
+      // Heads-up: Dealer (P1) is SB. Alice (P0) is BB.
+      table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
+      expect(table.currentHandState!.config.dealerIndex).toBe(1); // Bob (P1) is dealer/SB
+      expect(table.currentHandState!.players[0]!.id).toBe("P0"); // P0 is BB
+      expect(table.currentHandState!.players[1]!.id).toBe("P1"); // P1 is SB
+      
+      // End Hand 2
+      table = tableReducer(table, { type: "dispatchHandAction", action: { type: "fold", playerId: "P1" } });
+      expect(table.currentHandState!.currentRound).toBe("Ended");
+
+      // Hand 3: button rotates 1 -> 0.
+      // Heads-up: Dealer (P0) is SB. Bob (P1) is BB.
+      table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
+      expect(table.currentHandState!.config.dealerIndex).toBe(0); // Alice (P0) is dealer/SB
+      expect(table.currentHandState!.players[0]!.id).toBe("P0"); // P0 is SB
+      expect(table.currentHandState!.players[1]!.id).toBe("P1"); // P1 is BB
+    });
+  });
+
+  describe("Not enough players to start a hand", () => {
+    it("should return currentHandState as null if there are fewer than 2 active players", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 1000, seatIndex: 0 });
+      table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
+      expect(table.currentHandState).toBeNull();
     });
   });
 });

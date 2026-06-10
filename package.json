@@ -1,5 +1,17 @@
 {
+  "name": "poker-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=packages/poker-core",
+    "test": "npm run test --workspace=packages/poker-core",
+    "test:watch": "npm run test:watch --workspace=packages/poker-core"
+  },
   "devDependencies": {
-    "tsx": "^4.22.4"
+    "tsx": "^4.22.4",
+    "typescript": "^5.0.0"
   }
 }

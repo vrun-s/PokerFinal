@@ -247,15 +247,23 @@ export function assignBlindsAndStart(
     };
   }
 
-  // Find the dealer seat in activeSeats that minimizes distance clockwise to state.dealerIndex
+  // Find the dealer seat in activeSeats. In heads-up, alternate the button between the two active seats.
   let dealerSeat = activeSeats[0]!;
-  let minDistance = getClockwiseDistance(dealerSeat.index, state.dealerIndex, M);
-
-  for (const seat of activeSeats) {
-    const dist = getClockwiseDistance(seat.index, state.dealerIndex, M);
-    if (dist < minDistance) {
-      minDistance = dist;
-      dealerSeat = seat;
+  if (activeSeats.length === 2 && state.currentHandState && state.currentHandState.players.length === 2) {
+    const prevHand = state.currentHandState;
+    const prevDealerId = prevHand.players[prevHand.config.dealerIndex]?.id;
+    const otherSeat = activeSeats.find(s => s.playerId !== prevDealerId);
+    if (otherSeat) {
+      dealerSeat = otherSeat;
+    }
+  } else {
+    let minDistance = getClockwiseDistance(dealerSeat.index, state.dealerIndex, M);
+    for (const seat of activeSeats) {
+      const dist = getClockwiseDistance(seat.index, state.dealerIndex, M);
+      if (dist < minDistance) {
+        minDistance = dist;
+        dealerSeat = seat;
+      }
     }
   }
 
@@ -294,6 +302,10 @@ export function assignBlindsAndStart(
 export function tableReducer(state: TableState, action: TableAction): TableState {
   switch (action.type) {
     case "joinTable": {
+      // Validate buy-in amount
+      if (action.buyIn < state.config.minBuyIn || action.buyIn > state.config.maxBuyIn) {
+        return state;
+      }
       // Check if seat index is valid and empty
       const seat = state.seats[action.seatIndex];
       if (!seat || seat.status !== "empty") {
