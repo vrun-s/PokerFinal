@@ -21,3 +21,4 @@ export { compareMany } from "./evaluation/compareMany.js";
 export { calculatePots, distributePayouts } from "./state-machine/potCalculations.js";
 export { nextActor, isBettingRoundComplete, advanceRound } from "./state-machine/bettingRound.js";
 export { startHand, transition } from "./state-machine/reducer.js";
+export { createTable, tableReducer, applyHandPayouts, evictBustedPlayers, flushPendingActions, rotateDealerButton, assignBlindsAndStart, } from "./state-machine/table.js";

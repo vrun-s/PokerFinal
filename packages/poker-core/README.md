@@ -122,3 +122,10 @@ try {
   }
 }
 ```
+
+## Architectural Roadmap
+
+As the platform expands, features are divided into two isolated packages/layers:
+1. **Phase 4: Table Orchestration (Pure Logic)** - Bundled inside `@poker-platform/poker-core`. Houses pure seat allocation, buy-ins, evictions, atomic pending queues (mid-hand leaves/joins), Dead Button progression, and Wait-for-BB clearing logic.
+2. **Phase 5: Network Sync Layer (Server Infrastructure)** - Built on top of `poker-core`. Handles WebSocket server integrations, connection time bank tracking, client state sanitization/information masking, and validation filters for incoming network actions.
+

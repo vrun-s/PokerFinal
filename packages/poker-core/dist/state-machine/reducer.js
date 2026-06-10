@@ -185,6 +185,12 @@ export function transition(state, action) {
             break;
         }
         case "raise": {
+            if (player.hasActed) {
+                return {
+                    ok: false,
+                    error: { code: "INVALID_RAISE_AMOUNT", message: "Cannot raise when the action is not reopened." },
+                };
+            }
             const totalBet = action.totalBet;
             if (totalBet <= currentBet) {
                 return {

@@ -188,9 +188,16 @@ Each player has a `hasActed: boolean` flag in their state. It is reset to `false
 
 ---
 
-## 7. Future Roadmap (Phase 4 Preview)
+## 7. Future Roadmap (Phases 4 & 5 Preview)
 
-When extending the platform, the next steps include:
-- **Table Orchestration**: Managing multiple consecutive hands, tracking player buy-ins/cashouts, seating arrangements, blind structure schedules, and handling players sitting out or leaving the table.
-- **Network Sync Layer**: WebSocket protocol integration for real-time multiplayer coordination, secure event broad-casting, and remote client validation.
+When extending the platform, the next steps are divided into two distinct layers:
+- **Phase 4: Table Orchestration (Pure Domain Logic)**:
+  - Seat management (`Seat` occupied/empty/sitting-out status, buy-ins, stack updates).
+  - Atomic mid-hand join/leave action queuing (`pendingJoins` and `pendingLeaves`).
+  - Stand-alone blind rotation and the casino **Dead Button** rule.
+  - Seating restrictions including the **Wait for Big Blind** rule (`mustWaitForBB` seat flags).
+- **Phase 5: Server Network Sync Layer (Infrastructure)**:
+  - WebSocket interface for real-time multiplayer coordination.
+  - Strict Client State Sanitization (`sanitizeStateForClient`) to scrub hidden information (hole cards, deck cards) until showdown.
+  - Stale timeout action filters and connection time bank management.
 
