@@ -31,29 +31,29 @@ export async function processTableAction(
       }
 
       // Strip client-injected predetermined decks to prevent cheating
-      if (action.type === "startNextHand") {
-        action = { ...action, deck: undefined };
-      }
+      const processedAction = action.type === "startNextHand"
+        ? { ...action, deck: undefined }
+        : action;
 
       // 1. Enforce buy-in / top-up balance checks and deductions before running reducer
-      if (action.type === "joinTable") {
-        await deductPlayerBalance(client, action.playerId, action.buyIn);
-      } else if (action.type === "addChips") {
-        if (action.amount <= 0) {
+      if (processedAction.type === "joinTable") {
+        await deductPlayerBalance(client, processedAction.playerId, processedAction.buyIn);
+      } else if (processedAction.type === "addChips") {
+        if (processedAction.amount <= 0) {
           throw new Error("Add chips amount must be positive");
         }
-        const seat = state.seats.find(s => s.playerId === action.playerId);
+        const seat = state.seats.find(s => s.playerId === processedAction.playerId);
         if (!seat) {
           throw new Error("Player not seated at table");
         }
-        if (seat.stack + action.amount > state.config.maxBuyIn) {
+        if (seat.stack + processedAction.amount > state.config.maxBuyIn) {
           throw new Error("Top-up exceeds table max buy-in");
         }
-        await deductPlayerBalance(client, action.playerId, action.amount);
+        await deductPlayerBalance(client, processedAction.playerId, processedAction.amount);
       }
 
       // 2. Execute the pure table reducer
-      const nextState = tableReducer(state, action);
+      const nextState = tableReducer(state, processedAction);
 
       // If nextState is identical reference, the reducer rejected the action as invalid
       if (nextState === state) {
@@ -61,7 +61,7 @@ export async function processTableAction(
       }
 
       // 3. Process cash-outs (credits) for players leaving the table
-      if (action.type === "leaveTable") {
+      if (processedAction.type === "leaveTable") {
         // Compare seats to identify who left immediately (when table is idle)
         for (let i = 0; i < state.seats.length; i++) {
           const oldSeat = state.seats[i]!;
@@ -70,7 +70,7 @@ export async function processTableAction(
             await creditPlayerBalance(client, oldSeat.playerId, oldSeat.stack);
           }
         }
-      } else if (action.type === "startNextHand") {
+      } else if (processedAction.type === "startNextHand") {
         // Compute intermediate state post-payouts & evictions to find leaving players' stacks
         let postPayoutState = applyHandPayouts(state);
         postPayoutState = evictBustedPlayers(postPayoutState);
