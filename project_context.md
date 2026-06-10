@@ -24,70 +24,93 @@ This document serves as the single source of truth for the design decisions, arc
 ## 3. Directory Structure
 
 ```
-packages/poker-core/
-├── src/
-│   ├── types/
-│   │   ├── Suit.ts             ← Lowercase const-derived union
-│   │   ├── Rank.ts             ← Single-character const-derived union
-│   │   ├── Card.ts             ← Readonly interface { suit, rank }
-│   │   ├── Hand.ts             ← Readonly array of Cards wrapper
-│   │   ├── Deck.ts             ← type Deck = readonly Card[]
-│   │   ├── PRNG.ts             ← type PRNG = () => number
-│   │   ├── HandRank.ts         ← Numeric HandRank enum (0 to 8)
-│   │   ├── Classification.ts   ← Classified 5-card shape
-│   │   ├── BestHand.ts         ← Evaluated best 5 cards + score array
-│   │   ├── CompareResult.ts    ← win | loss | tie union
-│   │   ├── Result.ts           ← Generic Result container wrapper
-│   │   ├── ActionError.ts      ← Action validation error codes
-│   │   ├── GameState.ts        ← State machine types (PlayerState, HandState, GameAction, etc.)
-│   │   ├── CompareManyResult.ts ← Multi-player showdown result format
-│   │   └── PayoutResult.ts     ← Payout distribution schema
+packages/
+├── poker-core/
+│   ├── src/
+│   │   ├── types/
+│   │   │   ├── Suit.ts             ← Lowercase const-derived union
+│   │   │   ├── Rank.ts             ← Single-character const-derived union
+│   │   │   ├── Card.ts             ← Readonly interface { suit, rank }
+│   │   │   ├── Hand.ts             ← Readonly array of Cards wrapper
+│   │   │   ├── Deck.ts             ← type Deck = readonly Card[]
+│   │   │   ├── PRNG.ts             ← type PRNG = () => number
+│   │   │   ├── HandRank.ts         ← Numeric HandRank enum (0 to 8)
+│   │   │   ├── Classification.ts   ← Classified 5-card shape
+│   │   │   ├── BestHand.ts         ← Evaluated best 5 cards + score array
+│   │   │   ├── CompareResult.ts    ← win | loss | tie union
+│   │   │   ├── Result.ts           ← Generic Result container wrapper
+│   │   │   ├── ActionError.ts      ← Action validation error codes
+│   │   │   ├── GameState.ts        ← State machine types (PlayerState, HandState, GameAction, etc.)
+│   │   │   ├── CompareManyResult.ts ← Multi-player showdown result format
+│   │   │   └── PayoutResult.ts     ← Payout distribution schema
+│   │   │
+│   │   ├── constants/
+│   │   │   └── cards.ts            ← Re-exports SUITS and RANKS
+│   │   │
+│   │   ├── deck/
+│   │   │   ├── createDeck.ts       ← Deterministic 52 card creation
+│   │   │   ├── shuffleDeck.ts      ← Fisher-Yates using custom PRNG
+│   │   │   └── dealCards.ts        ← Pure dealer slice returning remaining
+│   │   │
+│   │   ├── errors/
+│   │   │   └── PokerError.ts       ← Custom error class with PokerErrorCode
+│   │   │
+│   │   ├── evaluation/
+│   │   │   ├── classify.ts         ← Cascade checks on exactly 5 cards
+│   │   │   ├── score.ts            ← Pre-computed score arrays
+│   │   │   ├── bestHand.ts         ← Selects best 5 from C(n, 5) combos
+│   │   │   ├── compareHands.ts     ← Lexicographical score comparison
+│   │   │   └── compareMany.ts      ← Multiplayer hand comparison
+│   │   │
+│   │   ├── state-machine/
+│   │   │   ├── potCalculations.ts  ← Pure side pot and payout distribution logic
+│   │   │   ├── bettingRound.ts     ← Action checking, next actor, round advance
+│   │   │   └── reducer.ts          ← startHand factory & transition state reducer
+│   │   │
+│   │   ├── utils/
+│   │   │   ├── cardUtils.ts        ← serialize, parse, compare, and rankValue
+│   │   │   └── combinations.ts     ← Pure combinations generator
+│   │   │
+│   │   └── index.ts                ← Clean package entry point
 │   │
-│   ├── constants/
-│   │   └── cards.ts            ← Re-exports SUITS and RANKS
+│   ├── tests/
+│   │   ├── createDeck.test.ts
+│   │   ├── shuffleDeck.test.ts
+│   │   ├── dealCards.test.ts
+│   │   ├── cardUtils.test.ts
+│   │   ├── combinations.test.ts
+│   │   ├── classify.test.ts
+│   │   ├── bestHand.test.ts
+│   │   ├── compareHands.test.ts
+│   │   ├── stateMachine.test.ts    ← Comprehensive Game State Machine tests
+│   │   ├── tableOrchestrator.test.ts ← Table Orchestrator tests (Phase 4)
+│   │   └── property.test.ts        ← Invariant & property-based tests
 │   │
-│   ├── deck/
-│   │   ├── createDeck.ts       ← Deterministic 52 card creation
-│   │   ├── shuffleDeck.ts      ← Fisher-Yates using custom PRNG
-│   │   └── dealCards.ts        ← Pure dealer slice returning remaining
-│   │
-│   ├── errors/
-│   │   └── PokerError.ts       ← Custom error class with PokerErrorCode
-│   │
-│   ├── evaluation/
-│   │   ├── classify.ts         ← Cascade checks on exactly 5 cards
-│   │   ├── score.ts            ← Pre-computed score arrays
-│   │   ├── bestHand.ts         ← Selects best 5 from C(n, 5) combos
-│   │   ├── compareHands.ts     ← Lexicographical score comparison
-│   │   └── compareMany.ts      ← Multiplayer hand comparison
-│   │
-│   ├── state-machine/
-│   │   ├── potCalculations.ts  ← Pure side pot and payout distribution logic
-│   │   ├── bettingRound.ts     ← Action checking, next actor, round advance
-│   │   └── reducer.ts          ← startHand factory & transition state reducer
-│   │
-│   ├── utils/
-│   │   ├── cardUtils.ts        ← serialize, parse, compare, and rankValue
-│   │   └── combinations.ts     ← Pure combinations generator
-│   │
-│   └── index.ts                ← Clean package entry point
+│   ├── tsconfig.json
+│   ├── package.json
+│   └── README.md
 │
-├── tests/
-│   ├── createDeck.test.ts
-│   ├── shuffleDeck.test.ts
-│   ├── dealCards.test.ts
-│   ├── cardUtils.test.ts
-│   ├── combinations.test.ts
-│   ├── classify.test.ts
-│   ├── bestHand.test.ts
-│   ├── compareHands.test.ts
-│   ├── stateMachine.test.ts    ← Comprehensive Game State Machine tests
-│   ├── tableOrchestrator.test.ts ← Table Orchestrator tests (Phase 4)
-│   └── property.test.ts        ← Invariant & property-based tests
-│
-├── tsconfig.json
-├── package.json
-└── README.md
+└── poker-server/
+    ├── src/
+    │   ├── db/
+    │   │   └── schema.sql          ← SQL Schema (players, hand_histories tables)
+    │   ├── services/
+    │   │   ├── postgresService.ts  ← Transaction queries (buy-in, credit, hands log)
+    │   │   ├── redisService.ts     ← K/V cache ops, static seeding, and Pub/Sub channel
+    │   │   ├── tableService.ts     ← Multi-node table reducer processor (sanitizes decks)
+    │   │   └── timeoutManager.ts   ← Clock tick handlers, redis time banks, grace timer
+    │   ├── sockets/
+    │   │   ├── sanitizeState.ts    ← Masks hole cards & removes deck
+    │   │   └── socketHandlers.ts   ← Registers websocket connection events & token auth
+    │   ├── config.ts               ← Global environment configuration parameters
+    │   └── server.ts               ← HTTP Server creation & REST auth registration route
+    ├── tests/
+    │   ├── integration.test.ts
+    │   ├── postgresService.test.ts
+    │   ├── sanitizeState.test.ts
+    │   └── timeoutManager.test.ts
+    ├── tsconfig.json
+    └── package.json
 ```
 
 ---
@@ -211,11 +234,36 @@ The table layer handles seating configurations, buying-in/topping-up chips, leav
 
 ---
 
-## 7. Future Roadmap (Phase 5 Preview)
+## 7. Server Network Sync Layer & Infrastructure (Phase 5)
 
-With Phase 4 (Table Orchestration) fully completed and integrated, the next phase focuses on connection infrastructure:
-- **Phase 5: Server Network Sync Layer (Infrastructure)**:
-  - WebSocket interface for real-time multiplayer coordination.
-  - Strict Client State Sanitization (`sanitizeStateForClient`) to scrub hidden information (hole cards, deck cards) until showdown.
-  - Stale timeout action filters and connection time bank management.
+The Server Network Sync Layer bridges the pure, immutable poker engines (`poker-core`) with real-time network clients, data stores, and persistent timers.
+
+### A. Infrastructure Components
+- **Redis Cache & Pub/Sub**: Acts as the primary in-memory store for real-time `TableState`. A Pub/Sub channel `table_updates` broadcasts changes. When any node processes a state modification, it publishes a table ID. Listening server instances retrieve the updated state and broadcast it to all connected sockets in the corresponding room.
+- **PostgreSQL Database**: Serves as the persistent transactional store. It maintains `players` (player IDs, names, and chips balances) and `hand_histories` (logs of completed poker hands). All chip transactions (buying-in, cashing out, mid-hand top-ups) are processed in atomic DB transactions.
+- **Socket.io WebSocket Layer**: Coordinates multi-player communication. Handles namespace/room management on a per-table basis (`table:<tableId>`), authenticates incoming socket connections, and maps client events to engine actions.
+
+### B. Security & Validation Mitigations
+1. **HMAC Player Token Authentication**: 
+   A dedicated REST endpoint `POST /api/auth` registers or retrieves players and generates an HMAC-SHA256 signature token (`{playerId}.{signature}`) using a server-side `AUTH_SECRET`. Sockets must present this token to subscribe to tables or execute actions.
+2. **Action Impersonation & Forged Timeout Prevention**:
+   All voluntary table/hand actions are checked against the authenticated `playerId` bound to the socket data payload. Injected `timeout` actions from clients are strictly rejected.
+3. **TOCTOU (Time-of-Check to Time-of-Use) Race Protection**:
+   Every table state maintains a monotonically increasing `handActionSeq`. Voluntary client actions must submit a matching sequence. If the sequence is stale (e.g., the player attempts to act while a server-initiated timeout is already being executed), the action is rejected. Server-initiated timeouts bypass sequence checking as they are executed internally.
+4. **AddChips Exploit Protection**:
+   Restricts top-up amounts to positive integers and caps player stacks to the table's `maxBuyIn`. Furthermore, chips added mid-hand are kept out of the active `HandState` to preserve stack integrity during gameplay; they are loaded into the seat stack only at the start of the next hand.
+5. **Redis Key Prefix Safety**:
+   The helper `getRedisKey(tableId)` handles inputs transparently, ensuring keys are prefixed with `table:` without risk of double-prefixing if a prefix is already provided.
+6. **Sub-Blind Preflop Showdown Advancement**:
+   Prevents deadlocks when all active players are all-in preflop with sub-blind stacks by resolving mandatory bets and automatically bypassing voluntary betting rounds.
+7. **Idle Table `mustWaitForBB` Tracking**:
+   Saves and tracks the last big blind seat index (`lastBBSeatIdx`) in `TableState` even when a table goes idle with 1 player. This ensures that new sit-ins correct post the big blind without bypassing validation rules.
+
+### C. WebSockets API Protocol
+- **`subscribe_table(tableId, token)`**: Validates the token and joins the room. Emits the client-sanitized `table_state`. Resumes the active timer if the player was previously disconnected.
+- **`join_table(tableId, token, name, buyIn, seatIndex, handActionSeq)`**: Deducts the buy-in from PostgreSQL, seats the player, and joins the socket room.
+- **`game_action(tableId, playerId, action, handActionSeq)`**: Dispatches player actions (fold, check, call, raise, sitOut, sitIn, addChips, leaveTable, startNextHand) after validating authorization.
+- **`timer_tick`**: Emitted by the server every second to broadcast the acting player's remaining action time, time bank status, and disconnection grace period.
+- **`table_state`**: Emitted to clients with sensitive details (other players' hole cards, remaining deck cards) masked unless the hand is in the `Showdown` round and the player has not folded.
+
 
