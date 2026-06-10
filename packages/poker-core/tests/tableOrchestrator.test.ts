@@ -607,4 +607,31 @@ describe("Table Orchestrator (Phase 4)", () => {
       expect(table.currentHandState).toBeNull();
     });
   });
+
+  describe("Version Clock Sequence (handActionSeq)", () => {
+    it("should initialize at 0, increment on state modifications, and remain unchanged on invalid actions", () => {
+      let table = createTable(config);
+      expect(table.handActionSeq).toBe(0);
+
+      // Successful join -> should increment to 1
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 500, seatIndex: 0 });
+      expect(table.handActionSeq).toBe(1);
+
+      // Invalid join (occupied seat) -> should NOT increment (stays 1)
+      table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 500, seatIndex: 0 });
+      expect(table.handActionSeq).toBe(1);
+
+      // Successful join -> should increment to 2
+      table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 500, seatIndex: 1 });
+      expect(table.handActionSeq).toBe(2);
+
+      // Invalid addChips (nonexistent player) -> should NOT increment (stays 2)
+      table = tableReducer(table, { type: "addChips", playerId: "nonexistent", amount: 100 });
+      expect(table.handActionSeq).toBe(2);
+
+      // Valid addChips -> should increment to 3
+      table = tableReducer(table, { type: "addChips", playerId: "P0", amount: 100 });
+      expect(table.handActionSeq).toBe(3);
+    });
+  });
 });

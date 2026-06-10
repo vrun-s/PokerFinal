@@ -84,6 +84,7 @@ export interface TableState {
   readonly handCount: number;
   readonly pendingJoins: readonly PendingJoin[];
   readonly pendingLeaves: readonly string[];
+  readonly handActionSeq: number;
 }
 
 export type TableAction =

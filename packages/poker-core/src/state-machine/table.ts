@@ -23,6 +23,7 @@ export function createTable(config: TableConfig): TableState {
     handCount: 0,
     pendingJoins: [],
     pendingLeaves: [],
+    handActionSeq: 0,
   };
 }
 
@@ -300,6 +301,17 @@ export function assignBlindsAndStart(
  * Pure state reducer for Table Orchestration.
  */
 export function tableReducer(state: TableState, action: TableAction): TableState {
+  const nextState = rawTableReducer(state, action);
+  if (nextState !== state) {
+    return {
+      ...nextState,
+      handActionSeq: state.handActionSeq + 1,
+    };
+  }
+  return state;
+}
+
+function rawTableReducer(state: TableState, action: TableAction): TableState {
   switch (action.type) {
     case "joinTable": {
       // Validate buy-in amount
@@ -395,6 +407,10 @@ export function tableReducer(state: TableState, action: TableAction): TableState
     }
 
     case "sitOut": {
+      const hasPlayer = state.seats.some(s => s.playerId === action.playerId && s.status === "occupied");
+      if (!hasPlayer) {
+        return state;
+      }
       const seats = state.seats.map(s => {
         if (s.playerId === action.playerId && s.status === "occupied") {
           return {
@@ -408,6 +424,10 @@ export function tableReducer(state: TableState, action: TableAction): TableState
     }
 
     case "sitIn": {
+      const hasPlayer = state.seats.some(s => s.playerId === action.playerId && s.status === "sitting-out");
+      if (!hasPlayer) {
+        return state;
+      }
       const seats = state.seats.map(s => {
         if (s.playerId === action.playerId && s.status === "sitting-out") {
           return {
@@ -422,6 +442,10 @@ export function tableReducer(state: TableState, action: TableAction): TableState
     }
 
     case "addChips": {
+      const hasPlayer = state.seats.some(s => s.playerId === action.playerId);
+      if (!hasPlayer) {
+        return state;
+      }
       const seats = state.seats.map(s => {
         if (s.playerId === action.playerId) {
           return {

@@ -20,6 +20,7 @@ export function createTable(config) {
         handCount: 0,
         pendingJoins: [],
         pendingLeaves: [],
+        handActionSeq: 0,
     };
 }
 /**
@@ -219,14 +220,24 @@ export function assignBlindsAndStart(state, deck, overridePrevBBSeatIdx) {
             currentHandState: null,
         };
     }
-    // Find the dealer seat in activeSeats that minimizes distance clockwise to state.dealerIndex
+    // Find the dealer seat in activeSeats. In heads-up, alternate the button between the two active seats.
     let dealerSeat = activeSeats[0];
-    let minDistance = getClockwiseDistance(dealerSeat.index, state.dealerIndex, M);
-    for (const seat of activeSeats) {
-        const dist = getClockwiseDistance(seat.index, state.dealerIndex, M);
-        if (dist < minDistance) {
-            minDistance = dist;
-            dealerSeat = seat;
+    if (activeSeats.length === 2 && state.currentHandState && state.currentHandState.players.length === 2) {
+        const prevHand = state.currentHandState;
+        const prevDealerId = prevHand.players[prevHand.config.dealerIndex]?.id;
+        const otherSeat = activeSeats.find(s => s.playerId !== prevDealerId);
+        if (otherSeat) {
+            dealerSeat = otherSeat;
+        }
+    }
+    else {
+        let minDistance = getClockwiseDistance(dealerSeat.index, state.dealerIndex, M);
+        for (const seat of activeSeats) {
+            const dist = getClockwiseDistance(seat.index, state.dealerIndex, M);
+            if (dist < minDistance) {
+                minDistance = dist;
+                dealerSeat = seat;
+            }
         }
     }
     // Sort active seats clockwise starting from index 0
@@ -256,8 +267,22 @@ export function assignBlindsAndStart(state, deck, overridePrevBBSeatIdx) {
  * Pure state reducer for Table Orchestration.
  */
 export function tableReducer(state, action) {
+    const nextState = rawTableReducer(state, action);
+    if (nextState !== state) {
+        return {
+            ...nextState,
+            handActionSeq: state.handActionSeq + 1,
+        };
+    }
+    return state;
+}
+function rawTableReducer(state, action) {
     switch (action.type) {
         case "joinTable": {
+            // Validate buy-in amount
+            if (action.buyIn < state.config.minBuyIn || action.buyIn > state.config.maxBuyIn) {
+                return state;
+            }
             // Check if seat index is valid and empty
             const seat = state.seats[action.seatIndex];
             if (!seat || seat.status !== "empty") {
@@ -345,6 +370,10 @@ export function tableReducer(state, action) {
             }
         }
         case "sitOut": {
+            const hasPlayer = state.seats.some(s => s.playerId === action.playerId && s.status === "occupied");
+            if (!hasPlayer) {
+                return state;
+            }
             const seats = state.seats.map(s => {
                 if (s.playerId === action.playerId && s.status === "occupied") {
                     return {
@@ -357,6 +386,10 @@ export function tableReducer(state, action) {
             return { ...state, seats };
         }
         case "sitIn": {
+            const hasPlayer = state.seats.some(s => s.playerId === action.playerId && s.status === "sitting-out");
+            if (!hasPlayer) {
+                return state;
+            }
             const seats = state.seats.map(s => {
                 if (s.playerId === action.playerId && s.status === "sitting-out") {
                     return {
@@ -370,6 +403,10 @@ export function tableReducer(state, action) {
             return { ...state, seats };
         }
         case "addChips": {
+            const hasPlayer = state.seats.some(s => s.playerId === action.playerId);
+            if (!hasPlayer) {
+                return state;
+            }
             const seats = state.seats.map(s => {
                 if (s.playerId === action.playerId) {
                     return {

@@ -1,21 +1,4 @@
-/**
- * Compares two score arrays lexicographically.
- * Returns positive if a > b, negative if a < b, 0 if equal.
- */
-function compareScores(a, b) {
-    const len = Math.min(a.length, b.length);
-    for (let i = 0; i < len; i++) {
-        const valA = a[i];
-        const valB = b[i];
-        if (valA !== undefined && valB !== undefined) {
-            if (valA > valB)
-                return 1;
-            if (valA < valB)
-                return -1;
-        }
-    }
-    return a.length - b.length;
-}
+import { compareScores } from "../utils/scoreUtils.js";
 /**
  * Compares multiple player hands and ranks them from best to worst.
  * Returns the winners (could be multiple on split) and the ordered list of player IDs.

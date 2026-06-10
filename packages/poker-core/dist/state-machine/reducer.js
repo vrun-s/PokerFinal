@@ -155,10 +155,12 @@ export function transition(state, action) {
         case "call": {
             const callAmount = currentBet - player.currentRoundBet;
             if (callAmount <= 0) {
-                // Equivalent to check
-                updatedPlayers[playerIdx] = {
-                    ...player,
-                    hasActed: true,
+                // A player mustn't be able to "call" when there is no bet to call
+                // "call" is only valid when there is an active bet, and the player
+                // wants to match that bet.
+                return {
+                    ok: false,
+                    error: { code: "INVALID_CALL", message: "Nothing to call. Use check instead." },
                 };
             }
             else if (player.stack <= callAmount) {
@@ -185,6 +187,7 @@ export function transition(state, action) {
             break;
         }
         case "raise": {
+            // since NaN passes every other JavaScript comparator operator, we need to check for it explicitly.
             if (!Number.isFinite(action.totalBet) || action.totalBet < 0) {
                 return {
                     ok: false,
