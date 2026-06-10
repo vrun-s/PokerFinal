@@ -24,6 +24,7 @@ export function createTable(config: TableConfig): TableState {
     pendingJoins: [],
     pendingLeaves: [],
     handActionSeq: 0,
+    lastBBSeatIdx: null,
   };
 }
 
@@ -173,12 +174,17 @@ export function assignBlindsAndStart(
     return {
       ...state,
       currentHandState: null,
+      lastBBSeatIdx: (overridePrevBBSeatIdx !== undefined && overridePrevBBSeatIdx !== -1)
+        ? overridePrevBBSeatIdx
+        : state.lastBBSeatIdx,
     };
   }
 
   let prevBBSeatIdx = -1;
   if (overridePrevBBSeatIdx !== undefined) {
     prevBBSeatIdx = overridePrevBBSeatIdx;
+  } else if (state.lastBBSeatIdx !== undefined && state.lastBBSeatIdx !== null) {
+    prevBBSeatIdx = state.lastBBSeatIdx;
   } else if (state.currentHandState) {
     const hand = state.currentHandState;
     const N_prev = hand.players.length;
@@ -245,6 +251,7 @@ export function assignBlindsAndStart(
       ...state,
       seats: updatedSeats,
       currentHandState: null,
+      lastBBSeatIdx: prevBBSeatIdx !== -1 ? prevBBSeatIdx : state.lastBBSeatIdx,
     };
   }
 
@@ -294,6 +301,7 @@ export function assignBlindsAndStart(
     seats: updatedSeats,
     currentHandState,
     handCount: state.handCount + 1,
+    lastBBSeatIdx: newBBSeatIdx !== -1 ? newBBSeatIdx : (prevBBSeatIdx !== -1 ? prevBBSeatIdx : state.lastBBSeatIdx),
   };
 }
 
@@ -466,6 +474,13 @@ function rawTableReducer(state: TableState, action: TableAction): TableState {
     }
 
     case "startNextHand": {
+      if (state.currentHandState) {
+        const round = state.currentHandState.currentRound;
+        if (round !== "Showdown" && round !== "Ended") {
+          return state;
+        }
+      }
+
       // Find the previous BB seat index from the CURRENT table state (before evictions/leaves)
       let prevBBSeatIdx: number | undefined = undefined;
       if (state.currentHandState) {

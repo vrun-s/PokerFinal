@@ -103,7 +103,7 @@ import {
   initializePubSub,
   registerTableUpdateListener,
 } from "../src/services/redisService.js";
-import { broadcastTableState } from "../src/sockets/socketHandlers.js";
+import { broadcastTableState, generatePlayerToken } from "../src/sockets/socketHandlers.js";
 
 describe("Socket Server Integration", () => {
   let port: number;
@@ -143,6 +143,9 @@ describe("Socket Server Integration", () => {
   });
 
   it("should support subscribing, joining table, and sanitizing player views", () => {
+    const aliceToken = generatePlayerToken("P0");
+    const bobToken = generatePlayerToken("P1");
+
     return new Promise<void>((resolve, reject) => {
       client1 = ClientIO(`http://localhost:${port}`, { autoConnect: false });
       client2 = ClientIO(`http://localhost:${port}`, { autoConnect: false });
@@ -155,12 +158,12 @@ describe("Socket Server Integration", () => {
 
       // Alice connects and subscribes to Table 1
       client1.on("connect", () => {
-        client1.emit("subscribe_table", { tableId: "1", playerId: "P0" });
+        client1.emit("subscribe_table", { tableId: "1", token: aliceToken });
       });
 
       // Bob connects and subscribes to Table 1
       client2.on("connect", () => {
-        client2.emit("subscribe_table", { tableId: "1", playerId: "P1" });
+        client2.emit("subscribe_table", { tableId: "1", token: bobToken });
       });
 
       client1.on("table_state", (state: any) => {
@@ -170,7 +173,7 @@ describe("Socket Server Integration", () => {
           expect(state.handActionSeq).toBe(0);
           client1.emit("join_table", {
             tableId: "1",
-            playerId: "P0",
+            token: aliceToken,
             name: "Alice",
             buyIn: 500,
             seatIndex: 0,
@@ -191,7 +194,7 @@ describe("Socket Server Integration", () => {
           // Bob joins at Seat 1 using the current sequence 1
           client2.emit("join_table", {
             tableId: "1",
-            playerId: "P1",
+            token: bobToken,
             name: "Bob",
             buyIn: 500,
             seatIndex: 1,

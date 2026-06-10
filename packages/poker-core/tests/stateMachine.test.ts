@@ -1218,5 +1218,17 @@ describe("Game State Machine (Phase 3)", () => {
       expect(state.currentRound).toBe("Showdown");
       expect(state.communityCards.length).toBe(5); // 4 turn + 1 more dealt
     });
+
+    it("should handle sub-blind stacks preflop and skip to showdown without getting stuck", () => {
+      const subBlindSeats: SeatConfig[] = [
+        { id: "P0", name: "Player 0", stack: 5 },
+        { id: "P1", name: "Player 1", stack: 5 },
+      ];
+      const state = startHand({ smallBlind: 10, bigBlind: 20, dealerIndex: 0 }, subBlindSeats, mockDeck);
+
+      expect(state.currentRound).toBe("Showdown");
+      expect(state.communityCards.length).toBe(5);
+      expect(state.actorIndex).toBe(-1);
+    });
   });
 });

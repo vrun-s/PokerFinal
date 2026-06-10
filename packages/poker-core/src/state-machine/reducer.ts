@@ -101,7 +101,23 @@ export function startHand(
   const currentBet = Math.max(sbBet, bbBet);
   const initialPots = calculatePots(players);
 
-  return {
+  // Find first active actor clockwise from actorIdx (inclusive)
+  let initialActorIdx = actorIdx;
+  let foundActive = false;
+  for (let i = 0; i < N; i++) {
+    const idx = (actorIdx + i) % N;
+    if (players[idx] && players[idx].status === "active") {
+      initialActorIdx = idx;
+      foundActive = true;
+      break;
+    }
+  }
+
+  if (!foundActive) {
+    initialActorIdx = -1;
+  }
+
+  let handState: HandState = {
     config,
     deck: currentDeck,
     communityCards: [],
@@ -110,8 +126,36 @@ export function startHand(
     pots: initialPots,
     currentBet,
     lastRaiseSize: config.bigBlind,
-    actorIndex: actorIdx,
+    actorIndex: initialActorIdx,
   };
+
+  // If there is only 1 active player, check if they already match/exceed currentBet
+  const activePlayers = handState.players.filter(p => p.status === "active");
+  if (activePlayers.length === 1) {
+    const activePlayer = activePlayers[0]!;
+    if (activePlayer.currentRoundBet >= handState.currentBet) {
+      // They don't need to act, set hasActed = true
+      const playerIdx = handState.players.findIndex(p => p.id === activePlayer.id);
+      if (playerIdx !== -1) {
+        const updatedPlayers = [...handState.players];
+        updatedPlayers[playerIdx] = {
+          ...activePlayer,
+          hasActed: true,
+        };
+        handState = {
+          ...handState,
+          players: updatedPlayers,
+        };
+      }
+    }
+  }
+
+  // Advance the round if complete (e.g. all-in preflop or no actors needed)
+  while (isBettingRoundComplete(handState) && handState.currentRound !== "Showdown" && handState.currentRound !== "Ended") {
+    handState = advanceRound(handState);
+  }
+
+  return handState;
 }
 
 /**

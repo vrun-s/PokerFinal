@@ -25,9 +25,14 @@ export async function processTableAction(
         throw new Error("Table not found");
       }
 
-      // Reject action if client sequence is out of sync with current state
-      if (state.handActionSeq !== clientHandActionSeq) {
+      // Reject action if client sequence is out of sync with current state (bypass for timeouts)
+      if (action.type !== "timeout" && state.handActionSeq !== clientHandActionSeq) {
         throw new Error("Out of sync action sequence (stale action rejected)");
+      }
+
+      // Strip client-injected predetermined decks to prevent cheating
+      if (action.type === "startNextHand") {
+        action = { ...action, deck: undefined };
       }
 
       // 1. Enforce buy-in / top-up balance checks and deductions before running reducer
