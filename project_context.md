@@ -204,7 +204,7 @@ The table layer handles seating configurations, buying-in/topping-up chips, leav
   - `leaveTable`: Evicts players immediately if idle, or queues in `pendingLeaves` if mid-hand.
   - `sitOut`: Transitions seat status to `"sitting-out"`. Players sitting out are skipped in subsequent hands.
   - `sitIn`: Re-seats players into the active list and sets `mustWaitForBB = true`.
-  - `addChips`: Adds chips to a player's seat stack immediately. Mid-hand top-ups do not affect their current hand stack.
+  - `addChips`: Adds chips to a player's seat stack immediately. Because the active hand's state (`HandState`) maintains a snapshot of player stacks when the hand is dealt to ensure game integrity (preventing stack fluctuation mid-hand), any chips added mid-hand will not be visible to or usable in the current active hand. The player's updated seat stack will be used when dealing the next hand.
   - `startNextHand`: Flushes pending leaves/joins, evicts busted players, rotates the dealer button (handling the Dead Button rule), and deals in players whose `mustWaitForBB` has cleared.
   - `timeout`: Converts a timed-out player's action to check or fold.
   - `dispatchHandAction`: Forwards standard hand decisions to the underlying `HandState` reducer.

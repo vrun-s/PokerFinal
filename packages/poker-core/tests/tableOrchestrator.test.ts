@@ -460,6 +460,29 @@ describe("Table Orchestrator (Phase 4)", () => {
       table = tableReducer(table, { type: "addChips", playerId: "nonexistent", amount: 500 });
       expect(JSON.stringify(table)).toBe(stateBefore);
     });
+
+    it("should no-op if adding zero or negative amount", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 500, seatIndex: 0 });
+      const stateBefore = JSON.stringify(table);
+
+      table = tableReducer(table, { type: "addChips", playerId: "P0", amount: 0 });
+      expect(JSON.stringify(table)).toBe(stateBefore);
+
+      table = tableReducer(table, { type: "addChips", playerId: "P0", amount: -100 });
+      expect(JSON.stringify(table)).toBe(stateBefore);
+    });
+
+    it("should no-op if top-up exceeds maxBuyIn", () => {
+      let table = createTable(config);
+      // maxBuyIn is 1000. Alice joins with 500.
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 500, seatIndex: 0 });
+      const stateBefore = JSON.stringify(table);
+
+      // Top-up 600 -> total 1100 > 1000 -> should no-op
+      table = tableReducer(table, { type: "addChips", playerId: "P0", amount: 600 });
+      expect(JSON.stringify(table)).toBe(stateBefore);
+    });
   });
 
   describe("joinTable & leaveTable Edge Cases", () => {

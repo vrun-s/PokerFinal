@@ -403,8 +403,12 @@ function rawTableReducer(state, action) {
             return { ...state, seats };
         }
         case "addChips": {
-            const hasPlayer = state.seats.some(s => s.playerId === action.playerId);
-            if (!hasPlayer) {
+            if (action.amount <= 0) {
+                return state;
+            }
+            const seat = state.seats.find(s => s.playerId === action.playerId);
+            // Ensure player is seated and their new stack won't exceed max buy-in
+            if (!seat || seat.stack + action.amount > state.config.maxBuyIn) {
                 return state;
             }
             const seats = state.seats.map(s => {
@@ -416,6 +420,9 @@ function rawTableReducer(state, action) {
                 }
                 return s;
             });
+            // Note: Top-ups reflect on the seat stack immediately. Mid-hand top-ups do not affect
+            // the current active hand's player stack (which remains locked in HandState).
+            // The player will play the next hand with their updated stack.
             return { ...state, seats };
         }
         case "startNextHand": {
