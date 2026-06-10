@@ -66,11 +66,7 @@ export function registerSocketHandlers(io: Server) {
 
       const res = await processTableAction(tableId, joinAction, handActionSeq);
 
-      if (res.success) {
-        // Sync active timer for the table state
-        syncTimerForTableState(io, res.state, tableId);
-        await broadcastTableState(io, tableId, res.state);
-      } else {
+      if (!res.success) {
         socket.emit("error", { message: res.error || "Failed to join table" });
       }
     });
@@ -92,11 +88,7 @@ export function registerSocketHandlers(io: Server) {
 
       const res = await processTableAction(tableId, action, handActionSeq);
 
-      if (res.success) {
-        // Sync active timer for the table state
-        syncTimerForTableState(io, res.state, tableId);
-        await broadcastTableState(io, tableId, res.state);
-      } else {
+      if (!res.success) {
         socket.emit("error", { message: res.error || "Action rejected" });
       }
     });

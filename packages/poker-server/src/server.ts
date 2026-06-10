@@ -1,8 +1,14 @@
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { config } from "./config.js";
-import { seedStaticTables, redisClient } from "./services/redisService.js";
-import { registerSocketHandlers } from "./sockets/socketHandlers.js";
+import {
+  seedStaticTables,
+  redisClient,
+  initializePubSub,
+  registerTableUpdateListener,
+} from "./services/redisService.js";
+import { registerSocketHandlers, broadcastTableState } from "./sockets/socketHandlers.js";
+import { syncTimerForTableState } from "./services/timeoutManager.js";
 
 const httpServer = createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
@@ -22,6 +28,14 @@ async function start() {
   try {
     await redisClient.connect();
     console.log("Connected to Redis");
+
+    // Wire up Redis Pub/Sub table change listener to update all sockets on this server instance
+    registerTableUpdateListener(async (tableId, state) => {
+      await broadcastTableState(io, tableId, state);
+      syncTimerForTableState(io, state, tableId);
+    });
+    await initializePubSub();
+    console.log("Connected Redis Pub/Sub");
 
     await seedStaticTables();
     console.log("Static tables seeded");

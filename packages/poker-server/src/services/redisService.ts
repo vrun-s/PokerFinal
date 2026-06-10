@@ -6,6 +6,38 @@ export const redisClient = new Redis(config.REDIS_URL, {
   lazyConnect: true,
 });
 
+export const redisSubscriber = new Redis(config.REDIS_URL, {
+  lazyConnect: true,
+});
+
+type TableUpdateListener = (tableId: string, state: TableState) => void;
+const updateListeners: TableUpdateListener[] = [];
+
+export function registerTableUpdateListener(listener: TableUpdateListener) {
+  updateListeners.push(listener);
+}
+
+export async function initializePubSub(): Promise<void> {
+  await redisSubscriber.connect();
+  await redisSubscriber.subscribe("table_updates");
+
+  redisSubscriber.on("message", async (channel, message) => {
+    if (channel === "table_updates") {
+      const { tableId } = JSON.parse(message);
+      const state = await getTableState(tableId);
+      if (state) {
+        for (const listener of updateListeners) {
+          listener(tableId, state);
+        }
+      }
+    }
+  });
+}
+
+export async function publishTableUpdate(tableId: string): Promise<void> {
+  await redisClient.publish("table_updates", JSON.stringify({ tableId }));
+}
+
 export async function seedStaticTables(): Promise<void> {
   const defaultTableConfig = {
     maxSeats: 6 as const,

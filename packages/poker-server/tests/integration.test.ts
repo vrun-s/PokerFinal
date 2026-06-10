@@ -3,11 +3,14 @@ import { AddressInfo } from "net";
 import { io as ClientIO, Socket as ClientSocket } from "socket.io-client";
 import { createTable, TableState } from "@poker-platform/poker-core";
 
-// 1. Mock ioredis in-memory before importing server
+// 1. Mock ioredis in-memory before importing server (including Pub/Sub channels mapping)
 const mockStore = new Map<string, string>();
+const mockSubscribers = new Map<string, Array<(channel: string, message: string) => void>>();
+
 vi.mock("ioredis", () => {
   return {
     Redis: class MockRedis {
+      private eventListeners = new Map<string, any[]>();
       constructor() {}
       async connect() {}
       async exists(key: string) {
@@ -18,6 +21,32 @@ vi.mock("ioredis", () => {
       }
       async set(key: string, value: string) {
         mockStore.set(key, value);
+      }
+      async publish(channel: string, message: string) {
+        const list = mockSubscribers.get(channel) || [];
+        for (const cb of list) {
+          cb(channel, message);
+        }
+      }
+      async subscribe(channel: string) {
+        if (!mockSubscribers.has(channel)) {
+          mockSubscribers.set(channel, []);
+        }
+        mockSubscribers.get(channel)!.push((chan, msg) => {
+          this.emit("message", chan, msg);
+        });
+      }
+      on(event: string, callback: any) {
+        if (!this.eventListeners.has(event)) {
+          this.eventListeners.set(event, []);
+        }
+        this.eventListeners.get(event)!.push(callback);
+      }
+      emit(event: string, ...args: any[]) {
+        const list = this.eventListeners.get(event) || [];
+        for (const cb of list) {
+          cb(...args);
+        }
       }
     }
   };
@@ -69,7 +98,12 @@ vi.mock("pg", () => {
 });
 
 // Import server now that mock environments are configured
-import { httpServer } from "../src/server.js";
+import { httpServer, io } from "../src/server.js";
+import {
+  initializePubSub,
+  registerTableUpdateListener,
+} from "../src/services/redisService.js";
+import { broadcastTableState } from "../src/sockets/socketHandlers.js";
 
 describe("Socket Server Integration", () => {
   let port: number;
@@ -86,6 +120,12 @@ describe("Socket Server Integration", () => {
       bigBlind: 20,
     });
     mockStore.set("table:1", JSON.stringify(initialTable));
+
+    // Initialize Pub/Sub subscriber client and channel listeners for tests
+    registerTableUpdateListener(async (tableId, state) => {
+      await broadcastTableState(io, tableId, state);
+    });
+    await initializePubSub();
 
     // Listen on random free port
     await new Promise<void>((resolve) => {

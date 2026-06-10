@@ -1,5 +1,5 @@
 import { TableState, TableAction, tableReducer, distributePayouts } from "@poker-platform/poker-core";
-import { getTableState, saveTableState } from "./redisService.js";
+import { getTableState, saveTableState, publishTableUpdate } from "./redisService.js";
 import {
   executeTransaction,
   deductPlayerBalance,
@@ -88,6 +88,7 @@ export async function processTableAction(
 
       // Commit changes to Redis cache
       await saveTableState(tableId, nextState);
+      await publishTableUpdate(tableId);
       return { success: true, state: nextState };
     });
   } catch (error: any) {
