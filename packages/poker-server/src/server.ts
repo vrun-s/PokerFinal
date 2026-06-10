@@ -32,7 +32,7 @@ async function start() {
     // Wire up Redis Pub/Sub table change listener to update all sockets on this server instance
     registerTableUpdateListener(async (tableId, state) => {
       await broadcastTableState(io, tableId, state);
-      syncTimerForTableState(io, state, tableId);
+      await syncTimerForTableState(io, state, tableId);
     });
     await initializePubSub();
     console.log("Connected Redis Pub/Sub");

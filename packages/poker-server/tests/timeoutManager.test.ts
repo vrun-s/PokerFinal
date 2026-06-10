@@ -9,13 +9,23 @@ import {
   setPlayerTimeBank,
 } from "../src/services/timeoutManager.js";
 import { processTableAction } from "../src/services/tableService.js";
-import { getTableState } from "../src/services/redisService.js";
 
 // Mock redis and table services
+const mockRedisStore = new Map<string, string>();
+const mockRedisClient = {
+  get: vi.fn().mockImplementation(async (key) => mockRedisStore.get(key) || null),
+  set: vi.fn().mockImplementation(async (key, val) => {
+    mockRedisStore.set(key, val);
+  }),
+};
+
 vi.mock("../src/services/redisService.js", () => {
   return {
     getTableState: vi.fn().mockResolvedValue({ handActionSeq: 5, currentHandState: {} }),
     saveTableState: vi.fn(),
+    get redisClient() {
+      return mockRedisClient;
+    }
   };
 });
 
@@ -39,6 +49,7 @@ describe("Timeout Manager & Time Banks", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    mockRedisStore.clear();
 
     emitMock = vi.fn();
     inMock = vi.fn().mockReturnValue({ emit: emitMock });
@@ -51,9 +62,9 @@ describe("Timeout Manager & Time Banks", () => {
     vi.useRealTimers();
   });
 
-  it("should tick standard countdown and emit timer_tick", () => {
-    setPlayerTimeBank("1", "P0", 30);
-    startPlayerTimer(mockIo, "1", "P0");
+  it("should tick standard countdown and emit timer_tick", async () => {
+    await setPlayerTimeBank("1", "P0", 30);
+    await startPlayerTimer(mockIo, "1", "P0");
 
     // Advance 1 second
     vi.advanceTimersByTime(1000);
@@ -69,9 +80,9 @@ describe("Timeout Manager & Time Banks", () => {
     clearTimer("1");
   });
 
-  it("should pause the timer during the 5s disconnect grace period, then resume tick", () => {
-    setPlayerTimeBank("1", "P0", 30);
-    startPlayerTimer(mockIo, "1", "P0");
+  it("should pause the timer during the 5s disconnect grace period, then resume tick", async () => {
+    await setPlayerTimeBank("1", "P0", 30);
+    await startPlayerTimer(mockIo, "1", "P0");
 
     // Advance 1s -> timeLeft becomes 14
     vi.advanceTimersByTime(1000);
@@ -106,9 +117,9 @@ describe("Timeout Manager & Time Banks", () => {
     clearTimer("1");
   });
 
-  it("should resume countdown immediately on reconnect during the grace period", () => {
-    setPlayerTimeBank("1", "P0", 30);
-    startPlayerTimer(mockIo, "1", "P0");
+  it("should resume countdown immediately on reconnect during the grace period", async () => {
+    await setPlayerTimeBank("1", "P0", 30);
+    await startPlayerTimer(mockIo, "1", "P0");
 
     // Advance 1s -> timeLeft becomes 14
     vi.advanceTimersByTime(1000);
@@ -134,8 +145,8 @@ describe("Timeout Manager & Time Banks", () => {
   });
 
   it("should deplete time bank when standard timer is finished, then dispatch timeout action", async () => {
-    setPlayerTimeBank("1", "P0", 2); // short time bank
-    startPlayerTimer(mockIo, "1", "P0");
+    await setPlayerTimeBank("1", "P0", 2); // short time bank
+    await startPlayerTimer(mockIo, "1", "P0");
 
     // Advance 15 seconds (standard timer finished)
     vi.advanceTimersByTime(15000);
@@ -147,8 +158,12 @@ describe("Timeout Manager & Time Banks", () => {
       isPaused: false,
     });
 
+    const flushPromises = () => new Promise(resolve => process.nextTick(resolve));
+
     // Advance 1 second -> consumes 1s of time bank
     vi.advanceTimersByTime(1000);
+    await flushPromises();
+    
     expect(emitMock).toHaveBeenLastCalledWith("timer_tick", {
       playerId: "P0",
       timeLeft: 0,
@@ -159,6 +174,8 @@ describe("Timeout Manager & Time Banks", () => {
 
     // Advance 1 second -> consumes remaining time bank and triggers action
     vi.advanceTimersByTime(1000);
+    await flushPromises();
+
     expect(emitMock).toHaveBeenLastCalledWith("timer_tick", {
       playerId: "P0",
       timeLeft: 0,

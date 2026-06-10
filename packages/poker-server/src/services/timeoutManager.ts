@@ -1,6 +1,6 @@
 import { Server } from "socket.io";
 import { config } from "../config.js";
-import { getTableState } from "./redisService.js";
+import { getTableState, redisClient } from "./redisService.js";
 import { processTableAction } from "./tableService.js";
 import { TableState } from "@poker-platform/poker-core";
 import { broadcastTableState } from "../sockets/socketHandlers.js";
@@ -15,22 +15,23 @@ interface ActiveTimer {
   intervalId: NodeJS.Timeout;
 }
 
-// Map of tableId -> ActiveTimer
+// Map of tableId -> ActiveTimer (tracked in-memory per node for local interval executions)
 const activeTimers = new Map<string, ActiveTimer>();
 
-// Map of "tableId:playerId" -> remaining time bank seconds
-const playerTimeBanks = new Map<string, number>();
-
-export function getPlayerTimeBank(tableId: string, playerId: string): number {
-  const key = `${tableId}:${playerId}`;
-  if (!playerTimeBanks.has(key)) {
-    playerTimeBanks.set(key, config.TIME_BANK_DEFAULT_SECONDS);
+export async function getPlayerTimeBank(tableId: string, playerId: string): Promise<number> {
+  const key = `timebank:${tableId}:${playerId}`;
+  const data = await redisClient.get(key);
+  if (data === null) {
+    // Initialize standard time bank in Redis
+    await redisClient.set(key, config.TIME_BANK_DEFAULT_SECONDS.toString());
+    return config.TIME_BANK_DEFAULT_SECONDS;
   }
-  return playerTimeBanks.get(key)!;
+  return parseInt(data, 10);
 }
 
-export function setPlayerTimeBank(tableId: string, playerId: string, seconds: number): void {
-  playerTimeBanks.set(`${tableId}:${playerId}`, seconds);
+export async function setPlayerTimeBank(tableId: string, playerId: string, seconds: number): Promise<void> {
+  const key = `timebank:${tableId}:${playerId}`;
+  await redisClient.set(key, seconds.toString());
 }
 
 export function clearTimer(tableId: string): void {
@@ -41,11 +42,11 @@ export function clearTimer(tableId: string): void {
   }
 }
 
-export function startPlayerTimer(io: Server, tableId: string, playerId: string): void {
+export async function startPlayerTimer(io: Server, tableId: string, playerId: string): Promise<void> {
   // Clear any existing timer for this table first
   clearTimer(tableId);
 
-  const timeBankLeft = getPlayerTimeBank(tableId, playerId);
+  const timeBankLeft = await getPlayerTimeBank(tableId, playerId);
 
   const timer: ActiveTimer = {
     tableId,
@@ -92,7 +93,7 @@ export function startPlayerTimer(io: Server, tableId: string, playerId: string):
       });
     } else if (currentTimer.timeBankLeft > 0) {
       currentTimer.timeBankLeft--;
-      setPlayerTimeBank(tableId, playerId, currentTimer.timeBankLeft);
+      await setPlayerTimeBank(tableId, playerId, currentTimer.timeBankLeft);
       io.in(`table:${tableId}`).emit("timer_tick", {
         playerId,
         timeLeft: 0,
@@ -112,7 +113,7 @@ export function startPlayerTimer(io: Server, tableId: string, playerId: string):
         if (res.success) {
           await broadcastTableState(io, tableId, res.state);
           // Start timer for the next actor if hand is still running
-          syncTimerForTableState(io, res.state, tableId);
+          await syncTimerForTableState(io, res.state, tableId);
         }
       }
     }
@@ -139,7 +140,7 @@ export function handleReconnect(io: Server, tableId: string, playerId: string): 
 /**
  * Automatically inspects the table state to set or clear active timers.
  */
-export function syncTimerForTableState(io: Server, state: TableState, tableId: string): void {
+export async function syncTimerForTableState(io: Server, state: TableState, tableId: string): Promise<void> {
   if (state.currentHandState) {
     const hand = state.currentHandState;
     if (hand.currentRound === "Showdown" || hand.currentRound === "Ended") {
@@ -147,7 +148,7 @@ export function syncTimerForTableState(io: Server, state: TableState, tableId: s
     } else {
       const activeActor = hand.players[hand.actorIndex];
       if (activeActor) {
-        startPlayerTimer(io, tableId, activeActor.id);
+        await startPlayerTimer(io, tableId, activeActor.id);
       } else {
         clearTimer(tableId);
       }
