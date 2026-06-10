@@ -63,6 +63,8 @@ export { calculatePots, distributePayouts } from "./state-machine/potCalculation
 export { startHand, transition } from "./state-machine/reducer.js";
 export {
   createTable,
-  tableReducer
+  tableReducer,
+  applyHandPayouts,
+  evictBustedPlayers
 } from "./state-machine/table.js";
 

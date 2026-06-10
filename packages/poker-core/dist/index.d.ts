@@ -27,4 +27,4 @@ export { compareHands } from "./evaluation/compareHands.js";
 export { compareMany } from "./evaluation/compareMany.js";
 export { calculatePots, distributePayouts } from "./state-machine/potCalculations.js";
 export { startHand, transition } from "./state-machine/reducer.js";
-export { createTable, tableReducer } from "./state-machine/table.js";
+export { createTable, tableReducer, applyHandPayouts, evictBustedPlayers } from "./state-machine/table.js";

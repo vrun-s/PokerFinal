@@ -1,4 +1,10 @@
-import { TableState, TableAction, tableReducer, distributePayouts } from "@poker-platform/poker-core";
+import {
+  TableState,
+  TableAction,
+  tableReducer,
+  applyHandPayouts,
+  evictBustedPlayers,
+} from "@poker-platform/poker-core";
 import { getTableState, saveTableState, publishTableUpdate } from "./redisService.js";
 import {
   executeTransaction,
@@ -28,6 +34,16 @@ export async function processTableAction(
       if (action.type === "joinTable") {
         await deductPlayerBalance(client, action.playerId, action.buyIn);
       } else if (action.type === "addChips") {
+        if (action.amount <= 0) {
+          throw new Error("Add chips amount must be positive");
+        }
+        const seat = state.seats.find(s => s.playerId === action.playerId);
+        if (!seat) {
+          throw new Error("Player not seated at table");
+        }
+        if (seat.stack + action.amount > state.config.maxBuyIn) {
+          throw new Error("Top-up exceeds table max buy-in");
+        }
         await deductPlayerBalance(client, action.playerId, action.amount);
       }
 
@@ -50,33 +66,15 @@ export async function processTableAction(
           }
         }
       } else if (action.type === "startNextHand") {
+        // Compute intermediate state post-payouts & evictions to find leaving players' stacks
+        let postPayoutState = applyHandPayouts(state);
+        postPayoutState = evictBustedPlayers(postPayoutState);
+
         // Credit players who left mid-hand and were flushed from pendingLeaves
-        for (let i = 0; i < state.seats.length; i++) {
-          const oldSeat = state.seats[i]!;
-          const newSeat = nextState.seats[i]!;
-          if (oldSeat.playerId !== null && newSeat.playerId === null) {
-            // Compute post-payout stack
-            let postPayoutStack = oldSeat.stack;
-            if (state.currentHandState) {
-              const hand = state.currentHandState;
-              if (hand.currentRound === "Showdown" || hand.currentRound === "Ended") {
-                const payoutResult = distributePayouts(
-                  hand.pots,
-                  hand.players,
-                  hand.communityCards,
-                  hand.config.dealerIndex
-                );
-                const handPlayer = hand.players.find(p => p.id === oldSeat.playerId);
-                if (handPlayer) {
-                  const payout = payoutResult.payouts.find(p => p.playerId === oldSeat.playerId);
-                  const payoutAmount = payout ? payout.amount : 0;
-                  postPayoutStack = handPlayer.stack + payoutAmount;
-                }
-              }
-            }
-            if (postPayoutStack > 0) {
-              await creditPlayerBalance(client, oldSeat.playerId, postPayoutStack);
-            }
+        for (const playerId of state.pendingLeaves) {
+          const seat = postPayoutState.seats.find(s => s.playerId === playerId);
+          if (seat && seat.stack > 0) {
+            await creditPlayerBalance(client, playerId, seat.stack);
           }
         }
 
