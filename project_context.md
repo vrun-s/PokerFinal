@@ -82,6 +82,7 @@ packages/poker-core/
 │   ├── bestHand.test.ts
 │   ├── compareHands.test.ts
 │   ├── stateMachine.test.ts    ← Comprehensive Game State Machine tests
+│   ├── tableOrchestrator.test.ts ← Table Orchestrator tests (Phase 4)
 │   └── property.test.ts        ← Invariant & property-based tests
 │
 ├── tsconfig.json
@@ -155,6 +156,13 @@ All tests are implemented in Vitest and are divided into:
      - Complex side-pot creation, merging, and lazy showdown evaluations.
      - Odd-chip allocation (clockwise closest to the left of the button).
      - Automatically running out remaining board cards from the deck when a skip-to-showdown condition is reached (<= 1 active player remaining).
+   - Covering the Table Orchestrator (`tableOrchestrator.test.ts`):
+     - Seat management (occupied, empty, sitting-out states).
+     - Buy-in limits verification.
+     - Mid-hand join/leave atomic queueing and deferred action flushing.
+     - Casino "Dead Button" rule and blind skipping with "mustWaitForBB" flags.
+     - Chip conservation invariant across hand boundaries.
+     - Heads-up blind rotation alternation.
 2. **Property-based tests**: Verifying core invariants over 100 random deals:
    - Evaluated best hand card counts are always exactly 5.
    - Score array lengths are consistent per `HandRank`.
@@ -163,9 +171,9 @@ All tests are implemented in Vitest and are divided into:
 
 ---
 
-## 6. Game State Machine & Side Pots (Phase 3)
+## 6. Game State Machine & Table Orchestration (Phases 3 & 4)
 
-The Texas Hold'em Game State Machine is implemented as a pure, immutable reducer:
+The Texas Hold'em Game State Machine and Table Orchestrator are implemented as pure, immutable reducers:
 
 ### A. Factory & Reducer Signatures
 - **`startHand(config: HandConfig, seats: readonly SeatConfig[], deck?: readonly Card[]): HandState`**:
@@ -186,16 +194,26 @@ Each player has a `hasActed: boolean` flag in their state. It is reset to `false
 - **`distributePayouts(pots: readonly Pot[], players: readonly PlayerState[], communityCards: readonly Card[], dealerIndex: number): PayoutResult`**:
   Evaluates hands lazily at showdown and divides each pot among the pot's winners (using `compareMany`). Odd chips are distributed to winning players closest to the left of the button (`dealerIndex`) clockwise.
 
+### D. Table Orchestration
+The table layer handles seating configurations, buying-in/topping-up chips, leaving, sitting out/in, and transitioning between hands:
+- **`createTable(config: TableConfig): TableState`**:
+  Initializes a new table with empty seats based on the config (e.g., maxSeats 6 or 9).
+- **`tableReducer(state: TableState, action: TableAction): TableState`**:
+  Implements the state machine for table orchestration:
+  - `joinTable`: Seats players at a specific seat. If a hand is in progress, the join is queued in `pendingJoins`. Validates min/max buy-in limits.
+  - `leaveTable`: Evicts players immediately if idle, or queues in `pendingLeaves` if mid-hand.
+  - `sitOut`: Transitions seat status to `"sitting-out"`. Players sitting out are skipped in subsequent hands.
+  - `sitIn`: Re-seats players into the active list and sets `mustWaitForBB = true`.
+  - `addChips`: Adds chips to a player's seat stack immediately. Mid-hand top-ups do not affect their current hand stack.
+  - `startNextHand`: Flushes pending leaves/joins, evicts busted players, rotates the dealer button (handling the Dead Button rule), and deals in players whose `mustWaitForBB` has cleared.
+  - `timeout`: Converts a timed-out player's action to check or fold.
+  - `dispatchHandAction`: Forwards standard hand decisions to the underlying `HandState` reducer.
+
 ---
 
-## 7. Future Roadmap (Phases 4 & 5 Preview)
+## 7. Future Roadmap (Phase 5 Preview)
 
-When extending the platform, the next steps are divided into two distinct layers:
-- **Phase 4: Table Orchestration (Pure Domain Logic)**:
-  - Seat management (`Seat` occupied/empty/sitting-out status, buy-ins, stack updates).
-  - Atomic mid-hand join/leave action queuing (`pendingJoins` and `pendingLeaves`).
-  - Stand-alone blind rotation and the casino **Dead Button** rule.
-  - Seating restrictions including the **Wait for Big Blind** rule (`mustWaitForBB` seat flags).
+With Phase 4 (Table Orchestration) fully completed and integrated, the next phase focuses on connection infrastructure:
 - **Phase 5: Server Network Sync Layer (Infrastructure)**:
   - WebSocket interface for real-time multiplayer coordination.
   - Strict Client State Sanitization (`sanitizeStateForClient`) to scrub hidden information (hole cards, deck cards) until showdown.

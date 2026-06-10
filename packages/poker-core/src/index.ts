@@ -9,6 +9,7 @@ export type { Deck } from "./types/Deck.js";
 export type { PRNG } from "./types/PRNG.js";
 export { HandRank } from "./types/HandRank.js";
 export type { Classification } from "./types/Classification.js";
+export type { PlayerHand } from "./evaluation/compareMany.js";
 export type { BestHand } from "./types/BestHand.js";
 export type { CompareResult } from "./types/CompareResult.js";
 
@@ -51,26 +52,17 @@ export {
   rankValue,
 } from "./utils/cardUtils.js";
 
-export { combinations } from "./utils/combinations.js";
 
 // Evaluation Functions
-export { classify } from "./evaluation/classify.js";
-export { scoreHand } from "./evaluation/score.js";
 export { bestHand } from "./evaluation/bestHand.js";
 export { compareHands } from "./evaluation/compareHands.js";
 export { compareMany } from "./evaluation/compareMany.js";
 
 // Game State Machine Functions
 export { calculatePots, distributePayouts } from "./state-machine/potCalculations.js";
-export { nextActor, isBettingRoundComplete, advanceRound } from "./state-machine/bettingRound.js";
 export { startHand, transition } from "./state-machine/reducer.js";
 export {
   createTable,
-  tableReducer,
-  applyHandPayouts,
-  evictBustedPlayers,
-  flushPendingActions,
-  rotateDealerButton,
-  assignBlindsAndStart,
+  tableReducer
 } from "./state-machine/table.js";
 

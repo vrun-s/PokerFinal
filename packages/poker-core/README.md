@@ -107,6 +107,41 @@ if (state.currentRound === "Showdown") {
 }
 ```
 
+### 5. Table Orchestration (Phase 4)
+
+Manage seating configurations, player buy-ins, mid-hand actions queueing, and consecutive hand transitions using a pure table reducer:
+
+```typescript
+import { createTable, tableReducer } from "@poker-platform/poker-core";
+
+const tableConfig = {
+  maxSeats: 6 as const,
+  minBuyIn: 100,
+  maxBuyIn: 1000,
+  smallBlind: 10,
+  bigBlind: 20,
+};
+
+// 1. Initialize a new table with empty seats
+let table = createTable(tableConfig);
+
+// 2. Sit players down (immediate seated since table is idle)
+table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 1000, seatIndex: 0 });
+table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 1000, seatIndex: 1 });
+
+// 3. Start a hand (Alice posts SB, Bob posts BB)
+table = tableReducer(table, { type: "startNextHand" });
+console.log("Active hand:", table.currentHandState !== null); // true
+
+// 4. Queue a new player's join and a player's leave mid-hand
+table = tableReducer(table, { type: "joinTable", playerId: "P2", name: "Carol", buyIn: 1000, seatIndex: 2 });
+table = tableReducer(table, { type: "leaveTable", playerId: "P0" });
+
+// 5. Progress hand and end it...
+// (Once hand ends, calling startNextHand flushes the queues, evicts busted players, and rotates the dealer button)
+table = tableReducer(table, { type: "startNextHand" });
+```
+
 ## Custom Errors
 
 When invalid operations are attempted, `poker-core` throws a custom `PokerError` with programmatically queryable codes:
@@ -126,6 +161,6 @@ try {
 ## Architectural Roadmap
 
 As the platform expands, features are divided into two isolated packages/layers:
-1. **Phase 4: Table Orchestration (Pure Logic)** - Bundled inside `@poker-platform/poker-core`. Houses pure seat allocation, buy-ins, evictions, atomic pending queues (mid-hand leaves/joins), Dead Button progression, and Wait-for-BB clearing logic.
+1. **Phase 4: Table Orchestration (Pure Logic)** - Fully implemented and bundled inside `@poker-platform/poker-core`. Houses pure seat allocation, buy-ins, evictions, atomic pending queues (mid-hand leaves/joins), Dead Button progression, and Wait-for-BB clearing logic.
 2. **Phase 5: Network Sync Layer (Server Infrastructure)** - Built on top of `poker-core`. Handles WebSocket server integrations, connection time bank tracking, client state sanitization/information masking, and validation filters for incoming network actions.
 
