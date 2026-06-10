@@ -186,10 +186,12 @@ export function transition(
     case "call": {
       const callAmount = currentBet - player.currentRoundBet;
       if (callAmount <= 0) {
-        // Equivalent to check
-        updatedPlayers[playerIdx] = {
-          ...player,
-          hasActed: true,
+        // A player mustn't be able to "call" when there is no bet to call
+        // "call" is only valid when there is an active bet, and the player
+        // wants to match that bet.
+        return {
+          ok: false,
+          error: { code: "INVALID_CALL", message: "Nothing to call. Use check instead." },
         };
       } else if (player.stack <= callAmount) {
         // All-in call
@@ -215,15 +217,23 @@ export function transition(
     }
 
     case "raise": {
+      // since NaN passes every other JavaScript comparator operator, we need to check for it explicitly.
+      if (!Number.isFinite(action.totalBet) || action.totalBet < 0) {
+        return {
+          ok: false,
+          error: { code: "INVALID_RAISE_AMOUNT", message: "totalBet must be a finite non-negative number." },
+        };
+      }
+
       if (player.hasActed) {
         return {
           ok: false,
-          error: { code: "INVALID_RAISE_AMOUNT", message: "Cannot raise when the action is not reopened." },
+          error: { code: "RAISE_NOT_ALLOWED", message: "Cannot raise when the action is not reopened." },
         };
       }
 
       const totalBet = action.totalBet;
-      
+
       if (totalBet <= currentBet) {
         return {
           ok: false,
@@ -235,7 +245,7 @@ export function transition(
       if (player.stack < chipsToAdd) {
         return {
           ok: false,
-          error: { code: "INVALID_RAISE_AMOUNT", message: "Insufficient stack to perform raise." },
+          error: { code: "INSUFFICIENT_STACK", message: "Insufficient stack to perform raise." },
         };
       }
 

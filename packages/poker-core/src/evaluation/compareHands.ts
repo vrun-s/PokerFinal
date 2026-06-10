@@ -1,22 +1,6 @@
 import { BestHand } from "../types/BestHand.js";
 import { CompareResult } from "../types/CompareResult.js";
-
-/**
- * Compares two score arrays lexicographically.
- * Returns positive if a > b, negative if a < b, 0 if equal.
- */
-function compareScores(a: readonly number[], b: readonly number[]): number {
-  const len = Math.min(a.length, b.length);
-  for (let i = 0; i < len; i++) {
-    const valA = a[i];
-    const valB = b[i];
-    if (valA !== undefined && valB !== undefined) {
-      if (valA > valB) return 1;
-      if (valA < valB) return -1;
-    }
-  }
-  return a.length - b.length;
-}
+import { compareScores } from "../utils/scoreUtils.js";
 
 /**
  * Compares two evaluated hands.
@@ -37,13 +21,4 @@ export function compareHands(a: BestHand, b: BestHand): CompareResult {
   }
 }
 
-/*
- * Phase 3 Preview / Sketch for Multi-Player Hand Comparison:
- *
- * export function compareMany(hands: readonly BestHand[]): {
- *   readonly winners: readonly BestHand[]; // 1 winner, or 2+ on a split pot
- *   readonly ranking: readonly BestHand[]; // all hands sorted best to worst
- * } {
- *   // ...
- * }
- */
+

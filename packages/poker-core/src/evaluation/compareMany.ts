@@ -1,28 +1,14 @@
 import { BestHand } from "../types/BestHand.js";
 import { CompareManyResult } from "../types/CompareManyResult.js";
+import { compareScores } from "../utils/scoreUtils.js";
 
+/**
+ * Represents a player's hand for comparison purposes.
+ */
 export interface PlayerHand {
   readonly playerId: string;
   readonly bestHand: BestHand;
 }
-
-/**
- * Compares two score arrays lexicographically.
- * Returns positive if a > b, negative if a < b, 0 if equal.
- */
-function compareScores(a: readonly number[], b: readonly number[]): number {
-  const len = Math.min(a.length, b.length);
-  for (let i = 0; i < len; i++) {
-    const valA = a[i];
-    const valB = b[i];
-    if (valA !== undefined && valB !== undefined) {
-      if (valA > valB) return 1;
-      if (valA < valB) return -1;
-    }
-  }
-  return a.length - b.length;
-}
-
 /**
  * Compares multiple player hands and ranks them from best to worst.
  * Returns the winners (could be multiple on split) and the ordered list of player IDs.

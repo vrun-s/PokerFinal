@@ -185,10 +185,16 @@ export function transition(state, action) {
             break;
         }
         case "raise": {
+            if (!Number.isFinite(action.totalBet) || action.totalBet < 0) {
+                return {
+                    ok: false,
+                    error: { code: "INVALID_RAISE_AMOUNT", message: "totalBet must be a finite non-negative number." },
+                };
+            }
             if (player.hasActed) {
                 return {
                     ok: false,
-                    error: { code: "INVALID_RAISE_AMOUNT", message: "Cannot raise when the action is not reopened." },
+                    error: { code: "RAISE_NOT_ALLOWED", message: "Cannot raise when the action is not reopened." },
                 };
             }
             const totalBet = action.totalBet;
@@ -202,7 +208,7 @@ export function transition(state, action) {
             if (player.stack < chipsToAdd) {
                 return {
                     ok: false,
-                    error: { code: "INVALID_RAISE_AMOUNT", message: "Insufficient stack to perform raise." },
+                    error: { code: "INSUFFICIENT_STACK", message: "Insufficient stack to perform raise." },
                 };
             }
             // Compute lastRaiseSize first before updating currentBet

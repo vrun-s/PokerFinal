@@ -4,6 +4,8 @@ export type ActionErrorCode =
   | "INVALID_CHECK"
   | "INVALID_CALL"
   | "INVALID_RAISE_AMOUNT"
+  | "RAISE_NOT_ALLOWED"
+  | "INSUFFICIENT_STACK"
   | "INVALID_ACTION";
 
 /**

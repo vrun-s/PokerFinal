@@ -136,13 +136,76 @@ describe("Game State Machine (Phase 3)", () => {
       }
     });
 
-    it("should return INVALID_RAISE_AMOUNT if raise exceeds player stack", () => {
+    it("should reject any action when currentRound is Ended", () => {
+      let state = startHand(config, seats, mockDeck);
+
+      // P0 folds immediately — hand ends with P1 or P2 winning uncontested
+      let res = transition(state, { type: "fold", playerId: "P0" });
+      state = (res as any).value;
+      res = transition(state, { type: "fold", playerId: "P1" });
+      state = (res as any).value;
+
+      expect(state.currentRound).toBe("Ended");
+
+      // Any further action should be rejected
+      for (const action of [
+        { type: "fold" as const, playerId: "P2" },
+        { type: "check" as const, playerId: "P2" },
+        { type: "call" as const, playerId: "P2" },
+        { type: "raise" as const, playerId: "P2", totalBet: 100 },
+      ]) {
+        const attempt = transition(state, action);
+        expect(attempt.ok).toBe(false);
+        if (!attempt.ok) {
+          expect(attempt.error.code).toBe("INVALID_ACTION");
+        }
+      }
+    });
+
+    it("should reject any action when currentRound is Showdown", () => {
+      // Run hand all the way to showdown by having everyone call through all streets
+      let state = startHand(config, seats, mockDeck);
+
+      // PreFlop: all call/check
+      state = (transition(state, { type: "call", playerId: "P0" }) as any).value;
+      state = (transition(state, { type: "call", playerId: "P1" }) as any).value;
+      state = (transition(state, { type: "check", playerId: "P2" }) as any).value;
+
+      // Flop, Turn, River: all check through
+      for (let street = 0; street < 3; street++) {
+        state = (transition(state, { type: "check", playerId: "P1" }) as any).value;
+        state = (transition(state, { type: "check", playerId: "P2" }) as any).value;
+        state = (transition(state, { type: "check", playerId: "P0" }) as any).value;
+      }
+
+      expect(state.currentRound).toBe("Showdown");
+
+      const attempt = transition(state, { type: "check", playerId: "P0" });
+      expect(attempt.ok).toBe(false);
+      if (!attempt.ok) {
+        expect(attempt.error.code).toBe("INVALID_ACTION");
+      }
+    });
+
+    it("should reject NaN, Infinity, and negative totalBet values", () => {
+      const state = startHand(config, seats, mockDeck);
+
+      for (const bad of [NaN, Infinity, -Infinity, -1]) {
+        const res = transition(state, { type: "raise", playerId: "P0", totalBet: bad });
+        expect(res.ok).toBe(false);
+        if (!res.ok) {
+          expect(res.error.code).toBe("INVALID_RAISE_AMOUNT");
+        }
+      }
+    });
+
+    it("should return INSUFFICIENT_STACK if raise exceeds player stack", () => {
       const state = startHand(config, seats, mockDeck);
       // P0 has stack 1000. Try raising to 2000.
       const res = transition(state, { type: "raise", playerId: "P0", totalBet: 2000 });
       expect(res.ok).toBe(false);
       if (!res.ok) {
-        expect(res.error.code).toBe("INVALID_RAISE_AMOUNT");
+        expect(res.error.code).toBe("INSUFFICIENT_STACK");
       }
     });
   });
@@ -238,6 +301,51 @@ describe("Game State Machine (Phase 3)", () => {
       // River complete! Advances to Showdown.
       expect(state.currentRound).toBe("Showdown");
       expect(state.actorIndex).toBe(-1);
+    });
+
+    it("should allow BB to raise when all players limp (BB option)", () => {
+      let state = startHand(config, seats, mockDeck);
+
+      // P0 (UTG) calls, P1 (SB) calls — both limp in
+      let res = transition(state, { type: "call", playerId: "P0" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      res = transition(state, { type: "call", playerId: "P1" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      // P2 (BB) still has hasActed=false — round is NOT complete yet
+      expect(state.currentRound).toBe("PreFlop");
+      expect(state.actorIndex).toBe(2); // BB gets option
+
+      // BB exercises the option and raises
+      res = transition(state, { type: "raise", playerId: "P2", totalBet: 60 });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      // Round should NOT advance — P0 and P1 now need to act again
+      expect(state.currentRound).toBe("PreFlop");
+      expect(state.currentBet).toBe(60);
+      expect(state.players[0]!.hasActed).toBe(false);
+      expect(state.players[1]!.hasActed).toBe(false);
+    });
+
+    it("should advance to flop when BB checks their option", () => {
+      let state = startHand(config, seats, mockDeck);
+
+      let res = transition(state, { type: "call", playerId: "P0" });
+      state = (res as any).value;
+      res = transition(state, { type: "call", playerId: "P1" });
+      state = (res as any).value;
+
+      // BB checks — closes the action, round advances
+      res = transition(state, { type: "check", playerId: "P2" });
+      expect(res.ok).toBe(true);
+      state = (res as any).value;
+
+      expect(state.currentRound).toBe("Flop");
+      expect(state.communityCards.length).toBe(3);
     });
 
     it("should terminate immediately if everyone folds to one player", () => {
@@ -542,7 +650,7 @@ describe("Game State Machine (Phase 3)", () => {
       const illegalRaiseResP0 = transition(state, { type: "raise", playerId: "P0", totalBet: 200 });
       expect(illegalRaiseResP0.ok).toBe(false);
       if (!illegalRaiseResP0.ok) {
-        expect(illegalRaiseResP0.error.code).toBe("INVALID_RAISE_AMOUNT");
+        expect(illegalRaiseResP0.error.code).toBe("RAISE_NOT_ALLOWED");
       }
 
       // Step 4: P0 calls the new currentBet of 150
@@ -558,7 +666,7 @@ describe("Game State Machine (Phase 3)", () => {
       const illegalRaiseResP1 = transition(state, { type: "raise", playerId: "P1", totalBet: 200 });
       expect(illegalRaiseResP1.ok).toBe(false);
       if (!illegalRaiseResP1.ok) {
-        expect(illegalRaiseResP1.error.code).toBe("INVALID_RAISE_AMOUNT");
+        expect(illegalRaiseResP1.error.code).toBe("RAISE_NOT_ALLOWED");
       }
 
       // Step 5: P1 calls the new currentBet of 150 (contributes 50 more chips)

@@ -36,13 +36,3 @@ export function compareHands(a, b) {
         return { result: "tie", winners: [a, b] };
     }
 }
-/*
- * Phase 3 Preview / Sketch for Multi-Player Hand Comparison:
- *
- * export function compareMany(hands: readonly BestHand[]): {
- *   readonly winners: readonly BestHand[]; // 1 winner, or 2+ on a split pot
- *   readonly ranking: readonly BestHand[]; // all hands sorted best to worst
- * } {
- *   // ...
- * }
- */

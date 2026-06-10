@@ -4,23 +4,7 @@ import { PokerError } from "../errors/PokerError.js";
 import { combinations } from "../utils/combinations.js";
 import { classify } from "./classify.js";
 import { scoreHand } from "./score.js";
-
-/**
- * Compares two score arrays lexicographically.
- * Returns positive if a > b, negative if a < b, and 0 if equal.
- */
-function compareScores(a: readonly number[], b: readonly number[]): number {
-  const len = Math.min(a.length, b.length);
-  for (let i = 0; i < len; i++) {
-    const valA = a[i];
-    const valB = b[i];
-    if (valA !== undefined && valB !== undefined) {
-      if (valA > valB) return 1;
-      if (valA < valB) return -1;
-    }
-  }
-  return a.length - b.length;
-}
+import { compareScores } from "../utils/scoreUtils.js";
 
 /**
  * Evaluates a set of 5 or more cards (typically 7 in Texas Hold'em)
