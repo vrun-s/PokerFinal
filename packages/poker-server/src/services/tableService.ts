@@ -15,7 +15,7 @@ import {
 
 export async function processTableAction(
   tableId: string,
-  action: TableAction,
+  action: TableAction | { readonly type: "timeout"; readonly playerId: string },
   clientHandActionSeq: number
 ): Promise<{ success: boolean; state: TableState; error?: string }> {
   try {
@@ -30,10 +30,32 @@ export async function processTableAction(
         throw new Error("Out of sync action sequence (stale action rejected)");
       }
 
-      // Strip client-injected predetermined decks to prevent cheating
-      const processedAction = action.type === "startNextHand"
-        ? { ...action, deck: undefined }
-        : action;
+      // Convert timeout to check or fold before running the tableReducer
+      let processedAction: TableAction;
+      if (action.type === "timeout") {
+        if (!state.currentHandState) {
+          throw new Error("No active hand for timeout");
+        }
+        const hand = state.currentHandState;
+        const currentActor = hand.players[hand.actorIndex];
+        if (!currentActor || currentActor.id !== action.playerId) {
+          throw new Error("Stale timeout action");
+        }
+
+        const isFold = currentActor.currentRoundBet < hand.currentBet;
+        const gameAction = isFold
+          ? { type: "fold" as const, playerId: action.playerId }
+          : { type: "check" as const, playerId: action.playerId };
+
+        processedAction = {
+          type: "dispatchHandAction",
+          action: gameAction,
+        };
+      } else if (action.type === "startNextHand") {
+        processedAction = { ...action, deck: undefined };
+      } else {
+        processedAction = action;
+      }
 
       // 1. Enforce buy-in / top-up balance checks and deductions before running reducer
       if (processedAction.type === "joinTable") {

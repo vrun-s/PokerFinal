@@ -69,17 +69,18 @@ export async function startPlayerTimer(io: Server, tableId: string, playerId: st
       currentTimer.graceTimeLeft--;
       if (currentTimer.graceTimeLeft <= 0) {
         currentTimer.isPaused = false;
+      } else {
+        // Broadcast grace period status
+        io.in(`table:${tableId}`).emit("timer_tick", {
+          playerId,
+          timeLeft: currentTimer.timeLeft,
+          timeBankLeft: currentTimer.timeBankLeft,
+          isTimeBank: false,
+          isPaused: true,
+          graceTimeLeft: currentTimer.graceTimeLeft,
+        });
+        return;
       }
-      // Broadcast grace period status
-      io.in(`table:${tableId}`).emit("timer_tick", {
-        playerId,
-        timeLeft: currentTimer.timeLeft,
-        timeBankLeft: currentTimer.timeBankLeft,
-        isTimeBank: false,
-        isPaused: true,
-        graceTimeLeft: currentTimer.graceTimeLeft,
-      });
-      return;
     }
 
     if (currentTimer.timeLeft > 0) {

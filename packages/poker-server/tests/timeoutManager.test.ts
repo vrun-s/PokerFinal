@@ -102,10 +102,8 @@ describe("Timeout Manager & Time Banks", () => {
     });
 
     // Advance 4 more seconds -> grace period expires (graceTimeLeft reaches 0)
+    // and countdown resumes in the same interval cycle (timeLeft becomes 13)
     vi.advanceTimersByTime(4000);
-
-    // Next tick should resume standard countdown (timeLeft becomes 13)
-    vi.advanceTimersByTime(1000);
     expect(emitMock).toHaveBeenLastCalledWith("timer_tick", {
       playerId: "P0",
       timeLeft: 13,

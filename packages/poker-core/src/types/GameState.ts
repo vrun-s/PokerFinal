@@ -95,5 +95,4 @@ export type TableAction =
   | { readonly type: "sitIn"; readonly playerId: string }
   | { readonly type: "addChips"; readonly playerId: string; readonly amount: number }
   | { readonly type: "startNextHand"; readonly deck?: readonly Card[] }
-  | { readonly type: "timeout"; readonly playerId: string }
   | { readonly type: "dispatchHandAction"; readonly action: GameAction };

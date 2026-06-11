@@ -510,32 +510,7 @@ function rawTableReducer(state: TableState, action: TableAction): TableState {
       return assignBlindsAndStart(nextState, action.deck, prevBBSeatIdx);
     }
 
-    case "timeout": {
-      if (!state.currentHandState) {
-        return state;
-      }
-      const hand = state.currentHandState;
-      const currentActor = hand.players[hand.actorIndex];
-      if (!currentActor || currentActor.id !== action.playerId) {
-        // Stale timeout protection
-        return state;
-      }
 
-      // Convert timeout to check (if possible) or fold
-      const isCheckPossible = currentActor.currentRoundBet === hand.currentBet;
-      const handAction: GameAction = isCheckPossible
-        ? { type: "check", playerId: action.playerId }
-        : { type: "fold", playerId: action.playerId };
-
-      const res = transition(hand, handAction);
-      if (!res.ok) {
-        return state;
-      }
-      return {
-        ...state,
-        currentHandState: res.value,
-      };
-    }
 
     case "dispatchHandAction": {
       if (!state.currentHandState) {

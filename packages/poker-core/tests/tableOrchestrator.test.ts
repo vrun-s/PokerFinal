@@ -79,34 +79,7 @@ describe("Table Orchestrator (Phase 4)", () => {
     });
   });
 
-  describe("Stale Timeout Protection", () => {
-    it("should ignore timeout actions from stale players", () => {
-      let table = createTable(config);
-      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 1000, seatIndex: 0 });
-      table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 1000, seatIndex: 1 });
-      table = tableReducer(table, { type: "joinTable", playerId: "P2", name: "Carol", buyIn: 1000, seatIndex: 2 });
-      
-      table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
-      
-      // actorIndex preflop is 0 (P0 / Alice)
-      expect(table.currentHandState!.actorIndex).toBe(0);
 
-      const stateBefore = table.currentHandState;
-
-      // Send timeout action for Bob (P1), who is NOT the current actor
-      table = tableReducer(table, { type: "timeout", playerId: "P1" });
-
-      // HandState should not have changed at all
-      expect(table.currentHandState).toEqual(stateBefore);
-
-      // Send timeout action for Alice (P0), who IS the current actor
-      table = tableReducer(table, { type: "timeout", playerId: "P0" });
-
-      // Alice should have folded, and turn should advance to Bob (P1)
-      expect(table.currentHandState!.actorIndex).toBe(1);
-      expect(table.currentHandState!.players[0]!.status).toBe("folded");
-    });
-  });
 
   describe("Busted Player Eviction", () => {
     it("should automatically evict players with stack === 0 at hand boundary", () => {
