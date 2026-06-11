@@ -1,0 +1,59 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: poker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  poker-server:
+    build:
+      context: .
+      dockerfile: packages/poker-server/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/poker
+      ACTION_TIMEOUT_SECONDS: 15
+      TIME_BANK_DEFAULT_SECONDS: 30
+      DISCONNECT_GRACE_PAUSE_SECONDS: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  poker-client:
+    build:
+      context: .
+      dockerfile: packages/poker-client/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - poker-server
+
+volumes:
+  postgres_data:

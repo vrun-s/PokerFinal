@@ -46,6 +46,13 @@ export function initializeSocketEvents() {
 
   socket.on("error", (err: any) => {
     console.error("Socket error received from server:", err);
+    const message = typeof err === "string" ? err : err.message || "An unknown error occurred";
+    useTableStore.getState().setErrorMessage(message);
+    setTimeout(() => {
+      if (useTableStore.getState().errorMessage === message) {
+        useTableStore.getState().setErrorMessage(null);
+      }
+    }, 5000);
   });
 }
 

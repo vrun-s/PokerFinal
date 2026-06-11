@@ -9,7 +9,7 @@ import {
 } from "./services/redisService.js";
 import { registerSocketHandlers, broadcastTableState, generatePlayerToken } from "./sockets/socketHandlers.js";
 import { syncTimerForTableState } from "./services/timeoutManager.js";
-import { executeTransaction, upsertPlayer } from "./services/postgresService.js";
+import { executeTransaction, upsertPlayer, initializeDatabaseSchema } from "./services/postgresService.js";
 
 const httpServer = createServer((req, res) => {
   // CORS Headers for REST API
@@ -64,6 +64,9 @@ registerSocketHandlers(io);
 
 async function start() {
   try {
+    await initializeDatabaseSchema();
+    console.log("Database schema initialized");
+
     await redisClient.connect();
     console.log("Connected to Redis");
 

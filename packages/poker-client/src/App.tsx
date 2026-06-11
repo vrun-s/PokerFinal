@@ -45,7 +45,8 @@ export const App: React.FC = () => {
     setAuthError("");
 
     try {
-      const response = await fetch("/api/auth", {
+      const apiPrefix = import.meta.env.VITE_API_URL || "";
+      const response = await fetch(`${apiPrefix}/api/auth`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playerId: inputPlayerId, name: inputName }),

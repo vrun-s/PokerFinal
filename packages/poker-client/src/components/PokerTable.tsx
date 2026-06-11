@@ -3,13 +3,14 @@ import { useTableStore } from "../store/useTableStore.ts";
 import { useSessionStore } from "../store/useSessionStore.ts";
 import { useTimerStore } from "../store/useTimerStore.ts";
 import { socket } from "../services/socket.ts";
+import { subscribeToTable } from "../services/socketEvents.ts";
 
 interface PokerTableProps {
   onSit: (seatIndex: number) => void;
 }
 
 export const PokerTable: React.FC<PokerTableProps> = ({ onSit }) => {
-  const { tableState, connectionStatus } = useTableStore();
+  const { tableState, connectionStatus, errorMessage } = useTableStore();
   const { playerId, seatIndex } = useSessionStore();
   const { activeTimer } = useTimerStore();
 
@@ -46,16 +47,44 @@ export const PokerTable: React.FC<PokerTableProps> = ({ onSit }) => {
 
   return (
     <div className="relative w-full max-w-5xl px-4 py-8 mx-auto">
+      {errorMessage && (
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-950/90 border border-red-500/40 text-red-200 px-6 py-2.5 rounded-xl text-sm font-semibold shadow-2xl backdrop-blur-md z-50 flex items-center gap-2 animate-pulse">
+          <span>⚠️</span>
+          <span>{errorMessage}</span>
+        </div>
+      )}
       {/* Oval felt board layout */}
       <div className="table-outer">
         <div className="table-felt"></div>
 
         {/* Reconnection Overlay */}
         {connectionStatus !== "connected" && (
-          <div className="reconnect-overlay">
-            <div className="spinner"></div>
-            <h3 className="text-xl font-bold mb-1">Connecting...</h3>
-            <p className="text-gray-400 text-sm">Attempting to establish server link</p>
+          <div className="reconnect-overlay flex flex-col items-center justify-center p-6 text-center">
+            {connectionStatus === "connecting" ? (
+              <>
+                <div className="spinner"></div>
+                <h3 className="text-xl font-bold mb-1 text-white">Connecting...</h3>
+                <p className="text-gray-400 text-sm">Attempting to establish server link</p>
+              </>
+            ) : (
+              <>
+                <div className="text-amber-500 text-3xl mb-3">⚠️</div>
+                <h3 className="text-xl font-bold mb-1 text-white">Connection Lost</h3>
+                <p className="text-gray-400 text-sm mb-4">You are disconnected from the server.</p>
+                <button
+                  onClick={() => {
+                    const token = useSessionStore.getState().token;
+                    const tableId = useSessionStore.getState().tableId;
+                    if (token) {
+                      subscribeToTable(tableId || "1", token);
+                    }
+                  }}
+                  className="btn-poker primary px-6 py-2 rounded-lg text-sm bg-cyan-600 hover:bg-cyan-500 text-white font-bold"
+                >
+                  Manual Reconnect
+                </button>
+              </>
+            )}
           </div>
         )}
 

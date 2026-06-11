@@ -31,8 +31,15 @@ export function verifyPlayerToken(token: string): string | null {
 }
 
 function validateActionPlayerId(action: TableAction, authenticatedPlayerId: string): boolean {
-  if (action.type === "timeout") {
-    // Clients can never submit timeout actions
+  // Runtime guard: Clients must never submit 'timeout' actions.
+  // Although TypeScript compile-time types exclude it, raw Socket.IO payloads are untrusted JSON.
+  const rawAction = action as unknown;
+  if (
+    typeof rawAction === "object" &&
+    rawAction !== null &&
+    "type" in rawAction &&
+    (rawAction as { type: string }).type === "timeout"
+  ) {
     return false;
   }
   if (action.type === "dispatchHandAction") {

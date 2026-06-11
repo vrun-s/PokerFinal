@@ -2,6 +2,9 @@ import pg from "pg";
 const { Pool } = pg;
 import { config } from "../config.js";
 import { TableState } from "@poker-platform/poker-core";
+import { fileURLToPath } from "url";
+import path from "path";
+import fs from "fs";
 
 export const pgPool = new Pool({
   connectionString: config.DATABASE_URL,
@@ -62,4 +65,22 @@ export async function logHandHistory(
     "INSERT INTO hand_histories (table_id, hand_number, state_log) VALUES ($1, $2, $3)",
     [tableId, handNumber, JSON.stringify(state)]
   );
+}
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export async function initializeDatabaseSchema(): Promise<void> {
+  const schemaPath = path.join(__dirname, "../db/schema.sql");
+  const schemaSql = fs.readFileSync(schemaPath, "utf8");
+  const client = await pgPool.connect();
+  try {
+    await client.query(schemaSql);
+    console.log("Database schema initialized successfully.");
+  } catch (error) {
+    console.error("Failed to initialize database schema:", error);
+    throw error;
+  } finally {
+    client.release();
+  }
 }

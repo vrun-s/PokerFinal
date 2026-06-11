@@ -4,12 +4,13 @@ import { useSessionStore } from "../store/useSessionStore.ts";
 import { sendGameAction } from "../services/socketEvents.ts";
 
 export const ActionPanel: React.FC = () => {
-  const { tableState } = useTableStore();
+  const { tableState, connectionStatus } = useTableStore();
   const { playerId, seatIndex } = useSessionStore();
   
   const [raiseValue, setRaiseValue] = useState<number>(0);
   const [buyInAmount, setBuyInAmount] = useState<number>(200);
 
+  const isConnected = connectionStatus === "connected";
   const hand = tableState?.currentHandState;
   const isMyTurn = hand && hand.actorIndex !== -1 && hand.players[hand.actorIndex]?.id === playerId;
   const activeActor = hand && hand.actorIndex !== -1 ? hand.players[hand.actorIndex] : null;
@@ -37,6 +38,7 @@ export const ActionPanel: React.FC = () => {
   if (!tableState) return null;
 
   const handleAction = (type: "fold" | "check" | "call" | "raise", extra?: any) => {
+    if (!isConnected) return;
     if (type === "raise") {
       sendGameAction({
         type: "dispatchHandAction",
@@ -58,19 +60,23 @@ export const ActionPanel: React.FC = () => {
   };
 
   const handleLeave = () => {
+    if (!isConnected) return;
     sendGameAction({ type: "leaveTable", playerId });
   };
 
   const handleSitOut = () => {
+    if (!isConnected) return;
     sendGameAction({ type: "sitOut", playerId });
   };
 
   const handleSitIn = () => {
+    if (!isConnected) return;
     sendGameAction({ type: "sitIn", playerId });
   };
 
   const handleAddChips = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isConnected) return;
     sendGameAction({
       type: "addChips",
       playerId,
@@ -85,7 +91,9 @@ export const ActionPanel: React.FC = () => {
       {/* Turn indicator / spectator text */}
       <div className="flex justify-between items-center text-sm">
         <div className="flex items-center gap-2">
-          {hand ? (
+          {!isConnected ? (
+            <span className="text-red-400 font-bold">● Connection Lost</span>
+          ) : hand ? (
             isMyTurn ? (
               <span className="text-cyan-400 font-bold animate-pulse">● Your Turn to Act</span>
             ) : activeActor ? (
@@ -100,11 +108,11 @@ export const ActionPanel: React.FC = () => {
         {seatIndex !== null && (
           <div className="flex items-center gap-3">
             {isSittingOut ? (
-              <button onClick={handleSitIn} className="btn-poker text-emerald-400 bg-emerald-950/20 hover:bg-emerald-900/30 border-emerald-900/40">
+              <button disabled={!isConnected} onClick={handleSitIn} className="btn-poker text-emerald-400 bg-emerald-950/20 hover:bg-emerald-900/30 border-emerald-900/40">
                 Sit In
               </button>
             ) : (
-              <button onClick={handleSitOut} className="btn-poker text-amber-400 bg-amber-950/20 hover:bg-amber-900/30 border-amber-900/40">
+              <button disabled={!isConnected} onClick={handleSitOut} className="btn-poker text-amber-400 bg-amber-950/20 hover:bg-amber-900/30 border-amber-900/40">
                 Sit Out
               </button>
             )}
@@ -113,16 +121,17 @@ export const ActionPanel: React.FC = () => {
             <form onSubmit={handleAddChips} className="flex items-center gap-2">
               <input
                 type="number"
+                disabled={!isConnected}
                 value={buyInAmount}
                 onChange={(e) => setBuyInAmount(parseInt(e.target.value) || 0)}
                 className="w-20 px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded text-sm text-center text-white focus:outline-none focus:border-cyan-500"
               />
-              <button type="submit" className="btn-poker">
+              <button type="submit" disabled={!isConnected} className="btn-poker">
                 + Chips
               </button>
             </form>
 
-            <button onClick={handleLeave} className="btn-poker text-red-400 bg-red-950/20 hover:bg-red-900/30 border-red-900/40">
+            <button disabled={!isConnected} onClick={handleLeave} className="btn-poker text-red-400 bg-red-950/20 hover:bg-red-900/30 border-red-900/40">
               Leave Seat
             </button>
           </div>
@@ -135,6 +144,7 @@ export const ActionPanel: React.FC = () => {
           <div className="flex gap-3 w-full md:w-auto">
             {foldAction && (
               <button
+                disabled={!isConnected}
                 onClick={() => handleAction("fold")}
                 className="btn-poker flex-1 md:flex-none border-red-900/30 text-red-400 bg-red-950/10 hover:bg-red-900/20"
               >
@@ -144,6 +154,7 @@ export const ActionPanel: React.FC = () => {
 
             {checkAction && (
               <button
+                disabled={!isConnected}
                 onClick={() => handleAction("check")}
                 className="btn-poker flex-1 md:flex-none border-cyan-900/30 text-cyan-400 bg-cyan-950/10 hover:bg-cyan-900/20"
               >
@@ -153,6 +164,7 @@ export const ActionPanel: React.FC = () => {
 
             {callAction && (
               <button
+                disabled={!isConnected}
                 onClick={() => handleAction("call")}
                 className="btn-poker flex-1 md:flex-none primary"
               >
@@ -166,6 +178,7 @@ export const ActionPanel: React.FC = () => {
             <div className="flex items-center gap-4 w-full md:w-auto flex-1 md:max-w-md">
               <input
                 type="range"
+                disabled={!isConnected}
                 min={minRaise}
                 max={maxRaise}
                 step={tableState.config.smallBlind}
@@ -177,6 +190,7 @@ export const ActionPanel: React.FC = () => {
               <div className="flex items-center gap-2 whitespace-nowrap">
                 <input
                   type="number"
+                  disabled={!isConnected}
                   min={minRaise}
                   max={maxRaise}
                   value={raiseValue}
@@ -188,6 +202,7 @@ export const ActionPanel: React.FC = () => {
                 />
                 
                 <button
+                  disabled={!isConnected}
                   onClick={() => handleAction("raise")}
                   className="btn-poker primary px-6"
                 >
