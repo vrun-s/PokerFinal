@@ -1,5 +1,11 @@
 import { TableState, Card } from "@poker-platform/poker-core";
 
+export interface LegalAction {
+  readonly type: "fold" | "check" | "call" | "raise";
+  readonly minRaise?: number;
+  readonly callAmount?: number;
+}
+
 export interface SanitizedPlayerState {
   readonly id: string;
   readonly name: string;
@@ -27,6 +33,7 @@ export interface SanitizedHandState {
   readonly currentBet: number;
   readonly lastRaiseSize: number;
   readonly actorIndex: number;
+  readonly legalActions: readonly LegalAction[];
 }
 
 export interface SanitizedTableState {
@@ -49,6 +56,7 @@ export interface SanitizedTableState {
   readonly dealerIndex: number;
   readonly handCount: number;
   readonly handActionSeq: number;
+  readonly stateVersion: number;
 }
 
 export function sanitizeStateForClient(state: TableState, playerId: string): SanitizedTableState {
@@ -84,6 +92,36 @@ export function sanitizeStateForClient(state: TableState, playerId: string): San
       };
     });
 
+    const legalActions: LegalAction[] = [];
+    if (hand.actorIndex !== -1) {
+      const currentActor = hand.players[hand.actorIndex];
+      if (currentActor && currentActor.id === playerId && currentActor.status === "active") {
+        legalActions.push({ type: "fold" });
+
+        if (currentActor.currentRoundBet === hand.currentBet) {
+          legalActions.push({ type: "check" });
+        }
+
+        if (currentActor.currentRoundBet < hand.currentBet) {
+          const callAmount = hand.currentBet - currentActor.currentRoundBet;
+          legalActions.push({
+            type: "call",
+            callAmount: Math.min(callAmount, currentActor.stack),
+          });
+        }
+
+        const callAmount = hand.currentBet - currentActor.currentRoundBet;
+        const canRaise = !currentActor.hasActed && currentActor.stack > callAmount;
+        if (canRaise) {
+          const minRaise = hand.currentBet + hand.lastRaiseSize;
+          legalActions.push({
+            type: "raise",
+            minRaise,
+          });
+        }
+      }
+    }
+
     sanitizedHand = {
       config: {
         smallBlind: hand.config.smallBlind,
@@ -100,6 +138,7 @@ export function sanitizeStateForClient(state: TableState, playerId: string): San
       currentBet: hand.currentBet,
       lastRaiseSize: hand.lastRaiseSize,
       actorIndex: hand.actorIndex,
+      legalActions,
     };
   }
 
@@ -116,5 +155,6 @@ export function sanitizeStateForClient(state: TableState, playerId: string): San
     dealerIndex: state.dealerIndex,
     handCount: state.handCount,
     handActionSeq: state.handActionSeq,
+    stateVersion: state.handActionSeq,
   };
 }

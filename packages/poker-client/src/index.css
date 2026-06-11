@@ -1,0 +1,205 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
+
+:root {
+  --bg-main: #0B0E14;
+  --bg-table: radial-gradient(circle, #1A4D2E 0%, #0F301B 70%, #081B0E 100%);
+  --table-border: #2C3E35;
+  --primary-accent: #00F5FF;
+  --accent-glow: rgba(0, 245, 255, 0.4);
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --text-primary: #F3F4F6;
+  --text-secondary: #9CA3AF;
+  --text-gold: #FFD700;
+  
+  font-family: 'Outfit', sans-serif;
+  color-scheme: dark;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Glassmorphism elements */
+.glass-panel {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.table-outer {
+  position: relative;
+  width: 90%;
+  max-width: 960px;
+  aspect-ratio: 16 / 9;
+  background: var(--bg-table);
+  border: 10px solid var(--table-border);
+  border-radius: 500px; /* Oval felt */
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 
+              inset 0 0 100px rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: auto;
+}
+
+.table-felt {
+  position: absolute;
+  inset: 15px;
+  border: 2px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 500px;
+  pointer-events: none;
+}
+
+/* Radial seating positioning (mapped relative to center of table-outer) */
+.seat {
+  position: absolute;
+  width: 140px;
+  height: 100px;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 6-max seating layout percentages */
+.seat-0 { top: 90%; left: 50%; }  /* Bottom / Hero */
+.seat-1 { top: 60%; left: 10%; }  /* Left Bottom */
+.seat-2 { top: 25%; left: 15%; }  /* Left Top */
+.seat-3 { top: 10%; left: 50%; }  /* Top */
+.seat-4 { top: 25%; left: 85%; }  /* Right Top */
+.seat-5 { top: 60%; left: 90%; }  /* Right Bottom */
+
+/* Cards layout styling */
+.card-container {
+  display: flex;
+  gap: 4px;
+}
+
+.card {
+  width: 42px;
+  height: 60px;
+  background: #FFF;
+  border-radius: 4px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 4px;
+  font-weight: 800;
+  font-size: 14px;
+  user-select: none;
+  animation: dealIn 0.3s ease-out;
+}
+
+.card.suit-hearts, .card.suit-diamonds {
+  color: #DC2626;
+}
+
+.card.suit-spades, .card.suit-clubs {
+  color: #1F2937;
+}
+
+.card-back {
+  background: radial-gradient(circle, #1E3A8A 0%, #172554 100%);
+  border: 2px solid #FFF;
+}
+
+/* Button & interactive components styling */
+.btn-poker {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-poker:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-poker.primary {
+  background: var(--primary-accent);
+  border-color: var(--primary-accent);
+  color: #000;
+}
+
+.btn-poker.primary:hover:not(:disabled) {
+  background: #00D2DD;
+  box-shadow: 0 0 15px var(--accent-glow);
+}
+
+.btn-poker:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Active Player Glow Ring */
+.active-glow {
+  box-shadow: 0 0 20px 4px var(--accent-glow);
+  border: 2px solid var(--primary-accent) !important;
+}
+
+/* Animations */
+@keyframes dealIn {
+  from {
+    transform: translateY(-50px) rotate(15deg);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) rotate(0);
+    opacity: 1;
+  }
+}
+
+.reconnect-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 14, 20, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 490px; /* oval overlay */
+}
+
+.spinner {
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border-left-color: var(--primary-accent);
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

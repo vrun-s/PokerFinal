@@ -136,4 +136,33 @@ describe("State Sanitization (sanitizeStateForClient)", () => {
     expect(sanitizedBob.currentHandState!.players[0]!.id).toBe("P0");
     expect(sanitizedBob.currentHandState!.players[0]!.cards).toEqual([null, null]);
   });
+
+  it("should calculate stateVersion and legalActions correctly", () => {
+    let table = createTable(tableConfig);
+    table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 1000, seatIndex: 0 });
+    table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 1000, seatIndex: 1 });
+
+    // Starts hand, table handActionSeq goes to 3
+    table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
+
+    const sanitizedAlice = sanitizeStateForClient(table, "P0");
+    const sanitizedBob = sanitizeStateForClient(table, "P1");
+
+    // stateVersion should map handActionSeq
+    expect(sanitizedAlice.stateVersion).toBe(table.handActionSeq);
+    expect(sanitizedAlice.stateVersion).toBe(3);
+
+    // Alice (P0) is dealer/SB and acts first preflop (actorIndex = 0)
+    expect(table.currentHandState!.actorIndex).toBe(0);
+
+    // Alice should see her legal actions
+    expect(sanitizedAlice.currentHandState!.legalActions).toEqual([
+      { type: "fold" },
+      { type: "call", callAmount: 10 }, // 20 (BB) - 10 (SB) = 10 to call
+      { type: "raise", minRaise: 40 },  // 20 (currentBet) + 20 (lastRaiseSize) = 40 minRaise
+    ]);
+
+    // Bob (P1) is BB, not his turn, so legalActions should be empty
+    expect(sanitizedBob.currentHandState!.legalActions).toEqual([]);
+  });
 });
