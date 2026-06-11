@@ -12,7 +12,7 @@ Welcome to the production-grade, real-time Texas Hold'em Poker Platform monorepo
 This workspace is divided into three distinct, isolated packages under `packages/`:
 
 1. **`poker-core`**: A pure, framework-agnostic library containing all card representations, deterministic deck shufflers, standard 5-to-7 card lexicographical evaluation algorithms, linear hand state transitions, dynamic side-pots calculations, and pure table orchestration logic (seat management, dead button rules, etc.).
-2. **`poker-server`**: A real-time synchronization server running on Node.js. It integrates the core engine logic with a PostgreSQL database for transaction-safe balance adjustments, a Redis cache/pub-sub cluster for state coordination and cross-node sync, and WebSockets (Socket.io) for multi-player client communication.
+2. **`poker-server`**: A real-time synchronization server running on Node.js and Fastify. It integrates the core engine logic with a PostgreSQL database for transaction-safe balance adjustments, a Redis cache/pub-sub cluster for state coordination and cross-node sync, WebSockets (Socket.io) for multi-player client communication, and Pino for structured JSON/human-readable logging.
 3. **`poker-client`**: A premium, real-time single-page web app built with React, TypeScript, and Vite. It links directly to the real-time server via WebSockets, utilizing split Zustand state stores (session, table state, and high-frequency timer ticks) to optimize layout rendering.
 
 ### System Data Flow
@@ -106,7 +106,7 @@ docker compose up --build
 This command orchestrates:
 - **`postgres`** (`5432`): Database initialization and automatic schema execution.
 - **`redis`** (`6379`): Cache and broker.
-- **`poker-server`** (`3000`): Real-time server. It automatically waits for postgres and redis healthchecks before starting.
+- **`poker-server`** (`3000`): Real-time Fastify server running Pino structured logs. It automatically waits for postgres and redis healthchecks before starting.
 - **`poker-client`** (`8080`): The React web application served by Nginx, routing WebSocket upgrades and HTTP requests back to the server.
 
 Navigate to [http://localhost:8080](http://localhost:8080) to start playing.

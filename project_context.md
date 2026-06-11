@@ -264,6 +264,8 @@ The Server Network Sync Layer bridges the pure, immutable poker engines (`poker-
 - **Redis Cache & Pub/Sub**: Acts as the primary in-memory store for real-time `TableState`. A Pub/Sub channel `table_updates` broadcasts changes. When any node processes a state modification, it publishes a table ID. Listening server instances retrieve the updated state and broadcast it to all connected sockets in the corresponding room.
 - **PostgreSQL Database**: Serves as the persistent transactional store. It maintains `players` (player IDs, names, and chips balances) and `hand_histories` (logs of completed poker hands). All chip transactions (buying-in, cashing out, mid-hand top-ups) are processed in atomic DB transactions.
 - **Socket.io WebSocket Layer**: Coordinates multi-player communication. Handles namespace/room management on a per-table basis (`table:<tableId>`), authenticates incoming socket connections, and maps client events to engine actions.
+- **Fastify HTTP Framework**: Serves as the web framework hosting REST endpoints (like `/api/auth` player registrations) and supplying CORS preflight headers.
+- **Pino & Pino-pretty Logging**: Structured logger bundled with Fastify. Configured to log detailed runtime JSON objects (detailing `tableId`, `playerId`, `action`, etc.) in production, while formatting logs to human-readable terminal lines locally using `pino-pretty`.
 
 ### B. Security & Validation Mitigations
 1. **HMAC Player Token Authentication**: 

@@ -12,6 +12,7 @@ import {
   creditPlayerBalance,
   logHandHistory,
 } from "./postgresService.js";
+import { logger } from "./logger.js";
 
 export async function processTableAction(
   tableId: string,
@@ -114,9 +115,11 @@ export async function processTableAction(
       // Commit changes to Redis cache
       await saveTableState(tableId, nextState);
       await publishTableUpdate(tableId);
+      logger.info({ tableId, action: action.type, playerId: (action as any).playerId }, "Action processed successfully");
       return { success: true, state: nextState };
     });
   } catch (error: any) {
+    logger.error({ tableId, action: action.type, playerId: (action as any).playerId, error: error.message }, "Action failed");
     // If PG transaction fails, Redis is untouched. Fetch and return current state.
     const originalState = await getTableState(tableId);
     return {

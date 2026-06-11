@@ -1,6 +1,7 @@
-import { createServer } from "http";
+import Fastify from "fastify";
 import { Server } from "socket.io";
 import { config } from "./config.js";
+import { logger } from "./services/logger.js";
 import {
   seedStaticTables,
   redisClient,
@@ -11,47 +12,52 @@ import { registerSocketHandlers, broadcastTableState, generatePlayerToken } from
 import { syncTimerForTableState } from "./services/timeoutManager.js";
 import { executeTransaction, upsertPlayer, initializeDatabaseSchema } from "./services/postgresService.js";
 
-const httpServer = createServer((req, res) => {
-  // CORS Headers for REST API
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
-
-  if (req.method === "POST" && req.url === "/api/auth") {
-    let body = "";
-    req.on("data", chunk => { body += chunk; });
-    req.on("end", async () => {
-      try {
-        const { playerId, name } = JSON.parse(body);
-        if (!playerId || !name) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Missing playerId or name" }));
-          return;
-        }
-        // Register/Upsert player in PG database with initial balance
-        await executeTransaction(async (client) => {
-          await upsertPlayer(client, playerId, name, 10000);
-        });
-        const token = generatePlayerToken(playerId);
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ token }));
-      } catch (err: any) {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: err.message || "Authentication failed" }));
-      }
-    });
-    return;
-  }
-
-  res.writeHead(200, { "Content-Type": "text/plain" });
-  res.end("Poker Server");
+const app = Fastify({
+  logger: {
+    level: process.env.LOG_LEVEL ?? "info",
+    transport: process.env.NODE_ENV === "development"
+      ? { target: "pino-pretty" }
+      : undefined,
+  },
 });
+
+// Configure CORS Headers for REST API
+app.addHook("onRequest", async (request, reply) => {
+  reply.header("Access-Control-Allow-Origin", "*");
+  reply.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  reply.header("Access-Control-Allow-Headers", "Content-Type");
+});
+
+// Auto-handle CORS preflight OPTIONS request
+app.options("/*", async (request, reply) => {
+  reply.code(204).send();
+});
+
+// API Auth endpoint
+app.post("/api/auth", async (request, reply) => {
+  try {
+    const { playerId, name } = request.body as { playerId?: string; name?: string };
+    if (!playerId || !name) {
+      reply.code(400).send({ error: "Missing playerId or name" });
+      return;
+    }
+    // Register/Upsert player in PG database with initial balance
+    await executeTransaction(async (client) => {
+      await upsertPlayer(client, playerId, name, 10000);
+    });
+    const token = generatePlayerToken(playerId);
+    reply.send({ token });
+  } catch (err: any) {
+    reply.code(500).send({ error: err.message || "Authentication failed" });
+  }
+});
+
+// Root endpoint fallback
+app.get("/", async (request, reply) => {
+  reply.type("text/plain").send("Poker Server");
+});
+
+export const httpServer = app.server;
 
 const io = new Server(httpServer, {
   cors: {
@@ -65,10 +71,10 @@ registerSocketHandlers(io);
 async function start() {
   try {
     await initializeDatabaseSchema();
-    console.log("Database schema initialized");
+    logger.info("Database schema initialized");
 
     await redisClient.connect();
-    console.log("Connected to Redis");
+    logger.info("Connected to Redis");
 
     // Wire up Redis Pub/Sub table change listener to update all sockets on this server instance
     registerTableUpdateListener(async (tableId, state) => {
@@ -76,22 +82,23 @@ async function start() {
       await syncTimerForTableState(io, state, tableId);
     });
     await initializePubSub();
-    console.log("Connected Redis Pub/Sub");
+    logger.info("Connected Redis Pub/Sub");
 
     await seedStaticTables();
-    console.log("Static tables seeded");
+    logger.info("Static tables seeded");
 
-    httpServer.listen(config.PORT, () => {
-      console.log(`Server listening on port ${config.PORT}`);
-    });
+    await app.listen({ port: config.PORT, host: "0.0.0.0" });
   } catch (error) {
-    console.error("Failed to start server:", error);
+    logger.error({ error }, "Failed to start server");
     process.exit(1);
   }
 }
 
 if (process.env.NODE_ENV !== "test") {
   start();
+} else {
+  // Compile fastify routes/hooks for integration tests
+  await app.ready();
 }
 
-export { httpServer, io };
+export { app, io };

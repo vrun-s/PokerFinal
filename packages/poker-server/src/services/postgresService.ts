@@ -5,6 +5,7 @@ import { TableState } from "@poker-platform/poker-core";
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
+import { logger } from "./logger.js";
 
 export const pgPool = new Pool({
   connectionString: config.DATABASE_URL,
@@ -76,9 +77,9 @@ export async function initializeDatabaseSchema(): Promise<void> {
   const client = await pgPool.connect();
   try {
     await client.query(schemaSql);
-    console.log("Database schema initialized successfully.");
+    logger.info("Database schema initialized successfully.");
   } catch (error) {
-    console.error("Failed to initialize database schema:", error);
+    logger.error({ error }, "Failed to initialize database schema");
     throw error;
   } finally {
     client.release();

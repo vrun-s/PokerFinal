@@ -9,6 +9,7 @@ import {
   syncTimerForTableState,
 } from "../services/timeoutManager.js";
 import crypto from "crypto";
+import { logger } from "../services/logger.js";
 
 const AUTH_SECRET = process.env.AUTH_SECRET || "poker-server-secret-key-12345";
 
@@ -77,6 +78,8 @@ export function registerSocketHandlers(io: Server) {
       socket.data.tableId = tableId;
       await socket.join(`table:${tableId}`);
 
+      logger.info({ tableId, playerId }, "Player subscribed to table room");
+
       // Handle timer reconnect grace period resume
       handleReconnect(io, tableId, playerId);
 
@@ -120,7 +123,10 @@ export function registerSocketHandlers(io: Server) {
       const res = await processTableAction(tableId, joinAction, handActionSeq);
 
       if (!res.success) {
+        logger.error({ tableId, playerId, error: res.error || "Failed to join table" }, "Player join table action failed");
         socket.emit("error", { message: res.error || "Failed to join table" });
+      } else {
+        logger.info({ tableId, playerId, seatIndex, buyIn }, "Player successfully joined table");
       }
     });
 
@@ -145,9 +151,12 @@ export function registerSocketHandlers(io: Server) {
         return;
       }
 
+      logger.info({ tableId, playerId, actionType: action.type }, "Received client game action");
+
       const res = await processTableAction(tableId, action, handActionSeq);
 
       if (!res.success) {
+        logger.error({ tableId, playerId, actionType: action.type, error: res.error || "Action rejected" }, "Client game action rejected");
         socket.emit("error", { message: res.error || "Action rejected" });
       }
     });
@@ -156,6 +165,7 @@ export function registerSocketHandlers(io: Server) {
     socket.on("disconnect", () => {
       const { tableId, playerId } = socket.data;
       if (tableId && playerId) {
+        logger.info({ tableId, playerId }, "Player disconnected");
         // Trigger grace pause if they were the active actor
         handleDisconnect(io, tableId, playerId);
       }
