@@ -111,6 +111,28 @@ packages/
     │   └── timeoutManager.test.ts
     ├── tsconfig.json
     └── package.json
+
+└── poker-client/
+    ├── src/
+    │   ├── components/
+    │   │   ├── ActionPanel.tsx     ← Context-aware gameplay action panel
+    │   │   └── PokerTable.tsx      ← Radial seats & community felt board
+    │   ├── services/
+    │   │   ├── socket.ts           ← Decoupled Socket.io client instance
+    │   │   └── socketEvents.ts     ← Websocket connection & game action routers
+    │   ├── store/
+    │   │   ├── useSessionStore.ts  ← Player session & token Zustand store
+    │   │   ├── useTableStore.ts    ← Board state & connection Zustand store
+    │   │   └── useTimerStore.ts    ← Active timer ticks Zustand store (isolated)
+    │   ├── types/
+    │   │   └── poker.ts            ← Sanitized state & action interfaces
+    │   ├── App.tsx                 ← Auth triggers, lobby routing, header
+    │   ├── main.tsx                ← DOM bootstrapper entry point
+    │   └── index.css               ← Oval felt theme & layout stylesheet
+    ├── index.html                  <!-- Entry HTML document for Vite -->
+    ├── vite.config.ts              ← Proxy settings with ws handshakes
+    ├── tsconfig.json
+    └── package.json
 ```
 
 ---
@@ -262,8 +284,28 @@ The Server Network Sync Layer bridges the pure, immutable poker engines (`poker-
 ### C. WebSockets API Protocol
 - **`subscribe_table(tableId, token)`**: Validates the token and joins the room. Emits the client-sanitized `table_state`. Resumes the active timer if the player was previously disconnected.
 - **`join_table(tableId, token, name, buyIn, seatIndex, handActionSeq)`**: Deducts the buy-in from PostgreSQL, seats the player, and joins the socket room.
-- **`game_action(tableId, playerId, action, handActionSeq)`**: Dispatches player actions (fold, check, call, raise, sitOut, sitIn, addChips, leaveTable, startNextHand) after validating authorization.
+- **`game_action(tableId, playerId, action, handActionSeq)`**: Dispatches player actions after validating authorization.
 - **`timer_tick`**: Emitted by the server every second to broadcast the acting player's remaining action time, time bank status, and disconnection grace period.
-- **`table_state`**: Emitted to clients with sensitive details (other players' hole cards, remaining deck cards) masked unless the hand is in the `Showdown` round and the player has not folded.
+- **`table_state`**: Emitted to clients with sensitive details masked unless in the `Showdown` round and the player has not folded. Includes `stateVersion` (table's `handActionSeq`) and `legalActions` calculated authoritatively for the active actor's seat.
+
+---
+
+## 8. Frontend Client Layer & UI Integration (Phase 6)
+
+The Frontend Client Layer is a premium single-page web app built with React, TypeScript, and Vite under `packages/poker-client`. It integrates with the server network layer via Socket.io and implements high-performance rendering.
+
+### A. Isolated Zustand State Stores
+To prevent layout redrawing and stuttering during high-frequency active timer countdown updates:
+1. **`useSessionStore`**: Manages session variables (`playerId`, `name`, `token`, `tableId`, `seatIndex`).
+2. **`useTableStore`**: Manages connection status and parsed `tableState`.
+3. **`useTimerStore`**: Manages isolated active timer tick counts (`activeTimer`). This prevents timer ticks from triggering unnecessary layout redrawing in the main board and seat components.
+
+### B. Decoupled Websocket Infrastructure
+- **`socket.ts`**: Pure instantiation file that exports the Socket.io client instance without references to Zustand stores, preventing circular dependencies.
+- **`socketEvents.ts`**: Binds incoming connection events and state packets to their corresponding store setter functions. Dispatches outgoing voluntary actions with the latest `stateVersion` sequence token.
+
+### C. UI Rendering & Felt Aesthetics
+- **Radial Positioning**: Positional mapping classes arrangement (shifting seat indices modularly so that the hero player's seat is always rendered at the bottom center of the oval felt).
+- **Action Panel**: Reads `legalActions` and enables fold, check, call, and total bet commitment raise inputs matching the minRaise/maxRaise limits calculated authoritatively by the server.
 
 
