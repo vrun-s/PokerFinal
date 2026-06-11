@@ -269,7 +269,7 @@ The Server Network Sync Layer bridges the pure, immutable poker engines (`poker-
 1. **HMAC Player Token Authentication**: 
    A dedicated REST endpoint `POST /api/auth` registers or retrieves players and generates an HMAC-SHA256 signature token (`{playerId}.{signature}`) using a server-side `AUTH_SECRET`. Sockets must present this token to subscribe to tables or execute actions.
 2. **Action Impersonation & Forged Timeout Prevention**:
-   All voluntary table/hand actions are checked against the authenticated `playerId` bound to the socket data payload. Injected `timeout` actions from clients are strictly rejected.
+   All voluntary table/hand actions are checked against the authenticated `playerId` bound to the socket data payload. Because socket data represents untrusted JSON payload input, the server casts inbound actions to `unknown` and performs runtime property type guards to strictly verify and reject injected `timeout` actions from clients before they enter the processing pipeline.
 3. **TOCTOU (Time-of-Check to Time-of-Use) Race Protection**:
    Every table state maintains a monotonically increasing `handActionSeq`. Voluntary client actions must submit a matching sequence. If the sequence is stale (e.g., the player attempts to act while a server-initiated timeout is already being executed), the action is rejected. Server-initiated timeouts bypass sequence checking as they are executed internally.
 4. **AddChips Exploit Protection**:
@@ -307,5 +307,39 @@ To prevent layout redrawing and stuttering during high-frequency active timer co
 ### C. UI Rendering & Felt Aesthetics
 - **Radial Positioning**: Positional mapping classes arrangement (shifting seat indices modularly so that the hero player's seat is always rendered at the bottom center of the oval felt).
 - **Action Panel**: Reads `legalActions` and enables fold, check, call, and total bet commitment raise inputs matching the minRaise/maxRaise limits calculated authoritatively by the server.
+
+---
+
+## 9. Deployment, Compose Orchestration & Polish (Phase 7)
+
+Phase 7 introduces multi-container orchestration, automatic database schema bootstrapping, production routing logic, and connection resilience.
+
+### A. Multi-Container Orchestration (`docker-compose.yml`)
+The platform is orchestrated locally and in production using Docker containers. The root-level Compose file defines 4 services:
+1. **`postgres`** (PostgreSQL 15-Alpine): Mounts a local volume for persistent database storage and runs a healthcheck using `pg_isready` to guarantee database availability.
+2. **`redis`** (Redis 7-Alpine): Runs a healthcheck using `redis-cli ping`.
+3. **`poker-server`**: Builds using the monorepo root context (`context: .`) with the explicit Dockerfile path `packages/poker-server/Dockerfile`. Employs `depends_on` conditions (`service_healthy` for postgres and redis) to resolve startup race conditions.
+4. **`poker-client`**: Builds using the monorepo root context with the Dockerfile path `packages/poker-client/Dockerfile` and serves static assets via Nginx.
+
+### B. Nginx Reverse Proxy Routing & WebSocket Upgrades (`nginx.conf`)
+The production Nginx reverse proxy routes requests dynamically:
+- `/` serves the compiled Single-Page Application assets.
+- `/api/` proxies REST API traffic directly to the backend.
+- `/socket.io/` handles WebSocket connections. The configuration passes explicit HTTP/1.1 Upgrade headers (`Connection "upgrade"`, `Upgrade $http_upgrade`), ensuring that real-time Socket.IO communication can upgrade from polling to WebSocket protocol without handshaking failures.
+
+### C. Automatic Database Schema Bootstrap
+To guarantee container boot reliability and eliminate manual configuration:
+- On startup, the server invokes `initializeDatabaseSchema()` inside `postgresService.ts`.
+- The schema file `schema.sql` uses `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` to remain idempotent across restarts.
+- During build, `scripts/copySchema.js` automatically moves the schema from `/src/db/schema.sql` to `/dist/db/schema.sql`. The server dynamically locates the schema path at runtime relative to the compiled module using ESM `import.meta.url` file URL utilities.
+
+### D. Production Environment Variables
+- **VITE_SOCKET_URL**: Allows setting an external socket origin for the frontend client in cloud production environments (e.g., Vercel, Netlify). If left undefined, the client falls back to `window.location.origin`.
+- **VITE_API_URL**: Prefixes HTTP/REST auth endpoints for hosting. If undefined, defaults to relative routing.
+
+### E. Connection Resilience & UI Error Handlers
+- **Reconnection Overlay**: In the event of network disruption, the client store transitions `connectionStatus`. If `disconnected`, a warning overlay blocks inputs and presents a "Manual Reconnect" action to trigger re-subscription.
+- **Action Locking**: When `connectionStatus !== "connected"`, the client disables all voluntary game buttons and input sliders in `ActionPanel.tsx` and wraps input handlers with connection state guards.
+- **Dynamic Error Banners**: Dispatched socket errors from the server are saved as `errorMessage` in the Zustand table store, displaying a temporary toast banner at the top of the table.
 
 

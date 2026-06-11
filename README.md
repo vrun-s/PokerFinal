@@ -1,5 +1,8 @@
 # Texas Hold'em Poker Platform Monorepo
 
+[![Live Demo](https://img.shields.io/badge/Demo-Live_Site-cyan?style=for-the-badge)](https://poker-arena.example.com)
+[![Docker Compose Setup](https://img.shields.io/badge/Local_Setup-Docker_Compose-blueviolet?style=for-the-badge)](#6-local-development-via-docker-compose)
+
 Welcome to the production-grade, real-time Texas Hold'em Poker Platform monorepo. This repository contains the complete Texas Hold'em engine and real-time multiplayer network sync layer, organized as an npm workspaces monorepo.
 
 ---
@@ -12,6 +15,16 @@ This workspace is divided into three distinct, isolated packages under `packages
 2. **`poker-server`**: A real-time synchronization server running on Node.js. It integrates the core engine logic with a PostgreSQL database for transaction-safe balance adjustments, a Redis cache/pub-sub cluster for state coordination and cross-node sync, and WebSockets (Socket.io) for multi-player client communication.
 3. **`poker-client`**: A premium, real-time single-page web app built with React, TypeScript, and Vite. It links directly to the real-time server via WebSockets, utilizing split Zustand state stores (session, table state, and high-frequency timer ticks) to optimize layout rendering.
 
+### System Data Flow
+```mermaid
+graph TD
+    Client[poker-client React/Vite] <-->|HTTP / WebSockets| Nginx[Nginx Reverse Proxy]
+    Nginx <-->|Proxy to Port 3000| Server[poker-server Node.js]
+    Server <-->|Caching & Pub/Sub| Redis[(Redis Cluster)]
+    Server <-->|Balances & Hand History| Postgres[(PostgreSQL DB)]
+```
+
+### Folder Layout
 ```
 .
 ├── packages/
@@ -25,7 +38,32 @@ This workspace is divided into three distinct, isolated packages under `packages
 
 ---
 
-## 2. Getting Started
+## 2. Key Technical Decisions
+
+### A. Pure Functional Reducer Engine (`poker-core`)
+The Texas Hold'em game engine is built as a pure, side-effect-free state reducer. It accepts a table state and a game action, and deterministically returns the next state. There are no databases, timers, or network concerns inside `poker-core`. This enables:
+- **100% Test Coverage**: The game engine can be tested exhaustively via automated unit and property-based test suites.
+- **Easy Replayability**: Any hand can be replayed from any state by feeding it the sequence of actions.
+
+### B. 3-Tier Card Visibility Model (Authoritative Sanitization)
+To prevent client-side hacks (like memory inspection or network packet decoding), opponent hole cards are masked. The server maintains a 3-Tier Card Visibility state:
+1. **Own Cards**: Only visible to the player holding them.
+2. **Tabled Showdown Cards**: Visible to all players once the hand enters showdown.
+3. **Hidden Opponent Cards**: Masked as null prior to showdown.
+Sanitization is computed authoritatively on the server *before* serializing and transmitting state payloads, ensuring clients never receive sensitive information about opponents' hands.
+
+### C. Redis Pub/Sub Horizontal Scaling
+State updates and active hand timers are synchronized across server processes via Redis Pub/Sub. When an action occurs on any server node, the updated table state is published to Redis. Connected backend nodes subscribe to the channel, receive the state change, and immediately broadcast it to their local socket connections.
+
+### D. Stale Sequence (TOCTOU) Prevention
+To prevent Time-of-Check to Time-of-Use (TOCTOU) race conditions—such as a player checking a fraction of a second after their turn times out and auto-folds—each state update carries an incrementing `stateVersion` (sequence count). Inbound game actions must supply the `handActionSeq` matching the version they acted upon. Stale actions are automatically rejected.
+
+### E. Untrusted Payload Type Narrowing & Validation
+Although the backend utilizes TypeScript types (such as `TableAction`) to declare compile-time schema bounds, incoming Socket.IO network payloads are untrusted JSON structures at runtime. To maintain type boundary integrity and block clients from invoking restricted internal operations (like injecting `"timeout"` events to auto-fold opponent hands), the server casts raw payloads to `unknown` and runs safe runtime property guards before handling them. This prevents malicious clients from bypassing network protocol boundaries.
+
+---
+
+## 3. Getting Started (Manual Install)
 
 ### Prerequisites
 - **Node.js**: v20+ recommended
@@ -33,9 +71,7 @@ This workspace is divided into three distinct, isolated packages under `packages
 - **PostgreSQL**: A database instance containing the schema specified in `packages/poker-server/src/db/schema.sql`
 
 ### Installation & Builds
-
 Run all commands from the root directory:
-
 ```bash
 # Install dependencies for all workspace packages
 npm install
@@ -45,25 +81,39 @@ npm run build
 ```
 
 ### Running Tests
-
-Execute the comprehensive test suites (containing 100+ unit and property-based test specs):
-
+Execute the comprehensive test suites:
 ```bash
 # Run all tests across the monorepo workspace (poker-core and poker-server)
 npm run test
 ```
 
-### Running the Server
-
-Start the real-time server in development mode with hot-reloading:
-
+### Running the Server Locally
+Start the real-time server in development mode:
 ```bash
 npm run dev --workspace=packages/poker-server
 ```
 
 ---
 
-## 3. Server Configuration & Environment
+## 4. Local Development via Docker Compose
+
+You can build and spin up the entire multi-service architecture locally using a single command:
+
+```bash
+docker compose up --build
+```
+
+This command orchestrates:
+- **`postgres`** (`5432`): Database initialization and automatic schema execution.
+- **`redis`** (`6379`): Cache and broker.
+- **`poker-server`** (`3000`): Real-time server. It automatically waits for postgres and redis healthchecks before starting.
+- **`poker-client`** (`8080`): The React web application served by Nginx, routing WebSocket upgrades and HTTP requests back to the server.
+
+Navigate to [http://localhost:8080](http://localhost:8080) to start playing.
+
+---
+
+## 5. Server Configuration & Environment
 
 The real-time server uses the following environment variables (configured via `.env` in `packages/poker-server/`):
 
@@ -74,12 +124,12 @@ The real-time server uses the following environment variables (configured via `.
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@localhost:5432/poker` |
 | `ACTION_TIMEOUT_SECONDS` | Standard action window per player | `15` |
 | `TIME_BANK_DEFAULT_SECONDS` | Default extra time-bank allocated per player | `30` |
-| `DISCONNECT_GRACE_PAUSE_SECONDS`| Delay before acting on an disconnected player | `5` |
+| `DISCONNECT_GRACE_PAUSE_SECONDS`| Delay before acting on a disconnected player | `5` |
 | `AUTH_SECRET` | HMAC signature key for player tokens | `poker-server-secret-key-12345` |
 
 ---
 
-## 4. REST & WebSockets API Protocol
+## 6. REST & WebSockets API Protocol
 
 ### A. REST Authentication API
 To connect to the poker server, a player must obtain a signed HMAC-SHA256 token.
@@ -155,17 +205,3 @@ All client actions must be authorized using the token generated during REST auth
    }
    ```
 3. **`error`**: Emitted if an action is rejected or invalid (e.g., `{ "message": "Out of sync action sequence" }`).
-
----
-
-## 5. Security & Invariant Integrity Guarantees
-
-The codebase has built-in protections against common online poker security threats and race conditions:
-
-- **TOCTOU Race Prevention**: The server tracks sequence counts (`handActionSeq`). If a client sends an action with a sequence that does not match the active cached state (e.g., they clicked call a split-second after their action timer expired and triggered a server-side auto-fold), the stale action is safely rejected. The client verifies this using the `stateVersion` property.
-- **HMAC Signatures**: Prevents client-side spoofing. Users cannot connect or act on behalf of another player ID without a valid signature matching the server's `AUTH_SECRET`.
-- **Cheat-Proof Actions**: The server strips user-supplied fields like `deck` on `startNextHand` actions to prevent clients from seeding predetermined decks.
-- **Top-Up Boundary Constraints**: The `addChips` action validates that the amount is strictly positive and that the final seat stack does not exceed the table's `maxBuyIn`.
-- **Mid-Hand Balance Lock**: Top-up chips are only integrated into the active hand state between hands to maintain absolute game invariants.
-- **Information Leak Protection**: Strict client state sanitization filters hole cards in memory prior to network serialization, mitigating client-side memory inspection hacks. It also restricts the computation of `legalActions` exclusively to the active actor.
-- **Store-Isolation Rendering**: The frontend application isolates high-frequency timer ticks from core table states inside separated Zustand stores to prevent rendering lags or layout stuttering.
