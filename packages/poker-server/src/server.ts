@@ -10,7 +10,8 @@ import {
 } from "./services/redisService.js";
 import { registerSocketHandlers, broadcastTableState, generatePlayerToken } from "./sockets/socketHandlers.js";
 import { syncTimerForTableState } from "./services/timeoutManager.js";
-import { executeTransaction, upsertPlayer, initializeDatabaseSchema } from "./services/postgresService.js";
+import { executeTransaction, createPlayer, getPlayerByUsername, initializeDatabaseSchema } from "./services/postgresService.js";
+import bcrypt from "bcryptjs";
 
 const app = Fastify({
   logger: {
@@ -33,20 +34,100 @@ app.options("/*", async (request, reply) => {
   reply.code(204).send();
 });
 
-// API Auth endpoint
-app.post("/api/auth", async (request, reply) => {
+// Register endpoint
+app.post("/api/register", async (request, reply) => {
   try {
-    const { playerId, name } = request.body as { playerId?: string; name?: string };
-    if (!playerId || !name) {
-      reply.code(400).send({ error: "Missing playerId or name" });
+    const { username, displayName, password } = request.body as {
+      username?: string;
+      displayName?: string;
+      password?: string;
+    };
+
+    if (!username || !displayName || !password) {
+      reply.code(400).send({ error: "Missing username, displayName, or password" });
       return;
     }
-    // Register/Upsert player in PG database with initial balance
-    await executeTransaction(async (client) => {
-      await upsertPlayer(client, playerId, name, 10000);
+
+    // Validation: username alphanumeric, 3–20 chars
+    const usernameRegex = /^[a-zA-Z0-9]{3,20}$/;
+    if (!usernameRegex.test(username)) {
+      reply.code(400).send({ error: "Username must be alphanumeric and between 3 and 20 characters" });
+      return;
+    }
+
+    // Validation: password min 8 chars
+    if (password.length < 8) {
+      reply.code(400).send({ error: "Password must be at least 8 characters long" });
+      return;
+    }
+
+    // Validation: displayName non-empty
+    if (displayName.trim().length === 0) {
+      reply.code(400).send({ error: "Display name cannot be empty" });
+      return;
+    }
+
+    // Check if username is already taken (duplicate check)
+    const existing = await executeTransaction(async (client) => {
+      return await getPlayerByUsername(client, username);
     });
-    const token = generatePlayerToken(playerId);
+
+    if (existing !== null) {
+      reply.code(409).send({ error: "Username is already taken" });
+      return;
+    }
+
+    // Hash password (only after ensuring username is free)
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Create player in database
+    await executeTransaction(async (client) => {
+      await createPlayer(client, username, displayName, passwordHash);
+    });
+
+    const token = generatePlayerToken(username);
     reply.send({ token });
+  } catch (err: any) {
+    reply.code(500).send({ error: err.message || "Registration failed" });
+  }
+});
+
+// Login endpoint
+app.post("/api/login", async (request, reply) => {
+  try {
+    const { username, password } = request.body as {
+      username?: string;
+      password?: string;
+    };
+
+    if (!username || !password) {
+      reply.code(400).send({ error: "Missing username or password" });
+      return;
+    }
+
+    const player = await executeTransaction(async (client) => {
+      return await getPlayerByUsername(client, username);
+    });
+
+    // Timing & Security: execute dummy compare if player not found to avoid timing attacks
+    if (!player) {
+      await bcrypt.compare(password, "$2b$10$invalidhashpadding000000000000000000000000000000000000");
+      reply.code(401).send({ error: "Invalid username or password" });
+      return;
+    }
+
+    const isMatch = await bcrypt.compare(password, player.password_hash);
+    if (!isMatch) {
+      reply.code(401).send({ error: "Invalid username or password" });
+      return;
+    }
+
+    const token = generatePlayerToken(player.id);
+    reply.send({
+      token,
+      name: player.name,
+      balance: player.balance,
+    });
   } catch (err: any) {
     reply.code(500).send({ error: err.message || "Authentication failed" });
   }

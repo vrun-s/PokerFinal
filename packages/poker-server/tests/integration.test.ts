@@ -65,6 +65,11 @@ vi.mock("pg", () => {
         async connect() {
           return {
             query: async (sql: string, params?: any[]) => {
+              if (sql.includes("SELECT id, name, password_hash, balance FROM players")) {
+                const playerId = params![0];
+                const balance = mockBalances.get(playerId) || 0;
+                return { rows: [{ id: playerId, name: playerId, password_hash: "mocked_hash", balance }] };
+              }
               if (sql.includes("SELECT balance")) {
                 const playerId = params![0];
                 const balance = mockBalances.get(playerId) || 0;

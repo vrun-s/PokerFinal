@@ -48,12 +48,35 @@ export async function creditPlayerBalance(client: pg.PoolClient, playerId: strin
   await client.query("UPDATE players SET balance = balance + $1 WHERE id = $2", [amount, playerId]);
 }
 
-export async function upsertPlayer(client: pg.PoolClient, id: string, name: string, balance: number): Promise<void> {
+export interface DatabasePlayer {
+  readonly id: string;
+  readonly name: string;
+  readonly password_hash: string;
+  readonly balance: number;
+}
+
+export async function createPlayer(
+  client: pg.PoolClient,
+  id: string,
+  name: string,
+  passwordHash: string
+): Promise<void> {
   await client.query(
-    `INSERT INTO players (id, name, balance) VALUES ($1, $2, $3)
-     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
-    [id, name, balance]
+    "INSERT INTO players (id, name, password_hash) VALUES ($1, $2, $3)",
+    [id, name, passwordHash]
   );
+}
+
+export async function getPlayerByUsername(
+  client: pg.PoolClient,
+  id: string
+): Promise<DatabasePlayer | null> {
+  const res = await client.query(
+    "SELECT id, name, password_hash, balance FROM players WHERE id = $1",
+    [id]
+  );
+  if (res.rows.length === 0) return null;
+  return res.rows[0] as DatabasePlayer;
 }
 
 export async function logHandHistory(

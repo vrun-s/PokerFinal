@@ -7,11 +7,13 @@ import { initializeSocketEvents, subscribeToTable, sendGameAction } from "./serv
 import { socket } from "./services/socket.ts";
 
 export const App: React.FC = () => {
-  const { playerId, name, token, tableId, setSession, clearSession } = useSessionStore();
+  const { playerId, name, token, tableId, balance, setSession, clearSession } = useSessionStore();
   const { tableState, connectionStatus } = useTableStore();
-  
-  const [inputPlayerId, setInputPlayerId] = useState("");
-  const [inputName, setInputName] = useState("");
+
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [inputUsername, setInputUsername] = useState("");
+  const [inputPassword, setInputPassword] = useState("");
+  const [inputDisplayName, setInputDisplayName] = useState("");
   const [authError, setAuthError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -34,11 +36,31 @@ export const App: React.FC = () => {
     }
   }, [token]);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputPlayerId.trim() || !inputName.trim()) {
-      setAuthError("Player ID and Name are required");
-      return;
+    const u = inputUsername.trim();
+    const p = inputPassword;
+    const d = inputDisplayName.trim();
+
+    if (isRegisterMode) {
+      if (!u || !d || !p) {
+        setAuthError("All fields are required");
+        return;
+      }
+      const usernameRegex = /^[a-zA-Z0-9]{3,20}$/;
+      if (!usernameRegex.test(u)) {
+        setAuthError("Username must be alphanumeric and between 3 and 20 characters");
+        return;
+      }
+      if (p.length < 8) {
+        setAuthError("Password must be at least 8 characters long");
+        return;
+      }
+    } else {
+      if (!u || !p) {
+        setAuthError("Username and password are required");
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -46,20 +68,40 @@ export const App: React.FC = () => {
 
     try {
       const apiPrefix = import.meta.env.VITE_API_URL || "";
-      const response = await fetch(`${apiPrefix}/api/auth`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId: inputPlayerId, name: inputName }),
-      });
+      if (isRegisterMode) {
+        // Register flow
+        const registerResponse = await fetch(`${apiPrefix}/api/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, displayName: d, password: p }),
+        });
 
-      if (!response.ok) {
-        throw new Error("Authentication failed");
+        if (!registerResponse.ok) {
+          const errData = await registerResponse.json().catch(() => ({}));
+          throw new Error(errData.error || "Registration failed");
+        }
+
+        const registerData = await registerResponse.json();
+        // Auto-login: use token directly and set initial balance to 10000
+        setSession(u, d, registerData.token, 10000);
+      } else {
+        // Login flow
+        const loginResponse = await fetch(`${apiPrefix}/api/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, password: p }),
+        });
+
+        if (!loginResponse.ok) {
+          const errData = await loginResponse.json().catch(() => ({}));
+          throw new Error(errData.error || "Invalid username or password");
+        }
+
+        const loginData = await loginResponse.json();
+        setSession(u, loginData.name, loginData.token, loginData.balance);
       }
-
-      const data = await response.json();
-      setSession(inputPlayerId, inputName, data.token);
     } catch (err: any) {
-      setAuthError(err.message || "Failed to authenticate");
+      setAuthError(err.message || "Authentication failed");
     } finally {
       setIsLoading(false);
     }
@@ -88,15 +130,15 @@ export const App: React.FC = () => {
     return (
       <div className="flex-1 flex items-center justify-center p-4">
         <form
-          onSubmit={handleLogin}
-          className="glass-panel w-full max-w-sm p-8 flex flex-col gap-5 border-slate-800 bg-slate-950/60"
+          onSubmit={handleSubmit}
+          className="glass-panel w-full max-w-sm p-8 flex flex-col gap-5 border-slate-800 bg-slate-955/60"
         >
           <div className="text-center">
             <h2 className="text-3xl font-black tracking-tight text-white mb-1">
               POKER ARENA
             </h2>
             <p className="text-xs text-gray-500 uppercase tracking-widest font-semibold">
-              Enter the Tournament
+              {isRegisterMode ? "Create an Account" : "Enter the Tournament"}
             </p>
           </div>
 
@@ -108,27 +150,43 @@ export const App: React.FC = () => {
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Player Username
+              Username
             </label>
             <input
               type="text"
-              placeholder="e.g. user_99"
-              value={inputPlayerId}
-              onChange={(e) => setInputPlayerId(e.target.value)}
+              placeholder="e.g. user99"
+              value={inputUsername}
+              onChange={(e) => setInputUsername(e.target.value)}
               className="px-3.5 py-2 bg-slate-900/80 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-cyan-500 text-sm"
               required
             />
           </div>
 
+          {isRegisterMode && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Display Name
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Captain Spade"
+                value={inputDisplayName}
+                onChange={(e) => setInputDisplayName(e.target.value)}
+                className="px-3.5 py-2 bg-slate-900/80 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-cyan-500 text-sm"
+                required
+              />
+            </div>
+          )}
+
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Display Name
+              Password
             </label>
             <input
-              type="text"
-              placeholder="e.g. Captain Spade"
-              value={inputName}
-              onChange={(e) => setInputName(e.target.value)}
+              type="password"
+              placeholder="••••••••"
+              value={inputPassword}
+              onChange={(e) => setInputPassword(e.target.value)}
               className="px-3.5 py-2 bg-slate-900/80 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-cyan-500 text-sm"
               required
             />
@@ -139,8 +197,44 @@ export const App: React.FC = () => {
             disabled={isLoading}
             className="btn-poker primary py-2.5 rounded-lg text-sm"
           >
-            {isLoading ? "Authenticating..." : "Join Lobby"}
+            {isLoading
+              ? "Authenticating..."
+              : isRegisterMode
+              ? "Create Account"
+              : "Join Lobby"}
           </button>
+
+          <div className="text-center text-xs text-gray-500 mt-2">
+            {isRegisterMode ? (
+              <span>
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegisterMode(false);
+                    setAuthError("");
+                  }}
+                  className="text-cyan-400 font-semibold hover:underline"
+                >
+                  Log In
+                </button>
+              </span>
+            ) : (
+              <span>
+                Don't have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegisterMode(true);
+                    setAuthError("");
+                  }}
+                  className="text-cyan-400 font-semibold hover:underline"
+                >
+                  Register
+                </button>
+              </span>
+            )}
+          </div>
         </form>
       </div>
     );
@@ -168,9 +262,16 @@ export const App: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm text-gray-400">
-            <span>Welcome,</span>
-            <span className="font-bold text-white">{name}</span>
+          <div className="flex flex-col md:flex-row md:items-center gap-2 text-sm text-gray-400">
+            <div className="flex items-center gap-2">
+              <span>Welcome,</span>
+              <span className="font-bold text-white">{name}</span>
+            </div>
+            {balance !== null && (
+              <span className="text-xs bg-emerald-950/40 border border-emerald-900/30 px-3.5 py-1 rounded-full text-emerald-400 font-bold uppercase tracking-wider">
+                Lobby Balance (at login): ${balance}
+              </span>
+            )}
           </div>
 
           {showStartHandButton && (

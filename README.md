@@ -99,6 +99,12 @@ npm run dev --workspace=packages/poker-server
 
 You can build and spin up the entire multi-service architecture locally using a single command:
 
+> [!WARNING]
+> **Database Schema Migration (Phase 8)**: Since the database schema was updated to introduce password hashing support via a mandatory `password_hash` column on the `players` table, any existing Docker PostgreSQL data volumes from previous runs must be dropped to ensure the correct schema is generated. Execute:
+> ```bash
+> docker compose down -v
+> ```
+
 ```bash
 docker compose up --build
 ```
