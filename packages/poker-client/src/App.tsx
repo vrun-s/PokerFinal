@@ -131,7 +131,7 @@ export const App: React.FC = () => {
       <div className="flex-1 flex items-center justify-center p-4">
         <form
           onSubmit={handleSubmit}
-          className="glass-panel w-full max-w-sm p-8 flex flex-col gap-5 border-slate-800 bg-slate-955/60"
+          className="glass-panel w-full max-w-sm p-8 flex flex-col gap-5 border-slate-800 bg-slate-900/60"
         >
           <div className="text-center">
             <h2 className="text-3xl font-black tracking-tight text-white mb-1">
@@ -157,7 +157,7 @@ export const App: React.FC = () => {
               placeholder="e.g. user99"
               value={inputUsername}
               onChange={(e) => setInputUsername(e.target.value)}
-              className="px-3.5 py-2 bg-slate-900/80 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-cyan-500 text-sm"
+              className="px-3.5 py-2 bg-slate-900/80 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-slate-400 text-sm"
               required
             />
           </div>
@@ -172,7 +172,7 @@ export const App: React.FC = () => {
                 placeholder="e.g. Captain Spade"
                 value={inputDisplayName}
                 onChange={(e) => setInputDisplayName(e.target.value)}
-                className="px-3.5 py-2 bg-slate-900/80 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-cyan-500 text-sm"
+                className="px-3.5 py-2 bg-slate-900/80 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-slate-400 text-sm"
                 required
               />
             </div>
@@ -187,7 +187,7 @@ export const App: React.FC = () => {
               placeholder="••••••••"
               value={inputPassword}
               onChange={(e) => setInputPassword(e.target.value)}
-              className="px-3.5 py-2 bg-slate-900/80 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-cyan-500 text-sm"
+              className="px-3.5 py-2 bg-slate-900/80 border border-slate-800 rounded-lg text-white focus:outline-none focus:border-slate-400 text-sm"
               required
             />
           </div>
@@ -195,7 +195,7 @@ export const App: React.FC = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="btn-poker primary py-2.5 rounded-lg text-sm"
+            className="w-full py-2.5 bg-white hover:bg-slate-200 text-slate-950 font-bold rounded-lg text-sm transition-all disabled:opacity-50"
           >
             {isLoading
               ? "Authenticating..."
@@ -214,7 +214,7 @@ export const App: React.FC = () => {
                     setIsRegisterMode(false);
                     setAuthError("");
                   }}
-                  className="text-cyan-400 font-semibold hover:underline"
+                  className="text-white hover:text-slate-200 font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer"
                 >
                   Log In
                 </button>
@@ -228,7 +228,7 @@ export const App: React.FC = () => {
                     setIsRegisterMode(true);
                     setAuthError("");
                   }}
-                  className="text-cyan-400 font-semibold hover:underline"
+                  className="text-white hover:text-slate-200 font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer"
                 >
                   Register
                 </button>
@@ -251,7 +251,7 @@ export const App: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col min-h-screen">
       {/* Header */}
-      <header className="glass-panel mx-4 mt-4 px-6 py-4 flex items-center justify-between border-slate-800 bg-slate-955/40 rounded-xl">
+      <header className="glass-panel mx-4 mt-4 px-6 py-4 flex items-center justify-between border-slate-800 bg-slate-900/40 rounded-xl">
         <div className="flex items-center gap-4">
           <span className="text-xl font-black tracking-widest text-cyan-400">
             POKER ARENA

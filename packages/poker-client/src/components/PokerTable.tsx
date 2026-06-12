@@ -89,7 +89,7 @@ export const PokerTable: React.FC<PokerTableProps> = ({ onSit }) => {
         )}
 
         {/* Center Felt - Pots & Board Cards */}
-        <div className="absolute flex flex-col items-center justify-center gap-4 text-center z-10 pointer-events-none">
+        <div className="table-center-felt">
           {/* Main Pot */}
           {totalPot > 0 && (
             <div className="glass-panel px-4 py-1.5 rounded-full flex items-center gap-2 text-sm font-semibold border-amber-500/20">
@@ -107,7 +107,7 @@ export const PokerTable: React.FC<PokerTableProps> = ({ onSit }) => {
               {hand.communityCards.map((card, idx) => (
                 <div
                   key={`${card.rank}-${card.suit}-${idx}`}
-                  className={`card suit-${card.suit}`}
+                  className={`card suit-${card.suit} flex-shrink-0`}
                 >
                   <div className="text-left leading-none">{card.rank}</div>
                   <div className="text-center text-xl leading-none">
@@ -132,7 +132,7 @@ export const PokerTable: React.FC<PokerTableProps> = ({ onSit }) => {
           const isOccupied = seat.status === "occupied" || seat.status === "sitting-out";
           const handPlayer = isOccupied ? hand?.players.find((p) => p.id === seat.playerId) : null;
           const isActor = handPlayer && hand?.actorIndex !== -1 && hand?.players[hand.actorIndex]?.id === seat.playerId;
-          
+
           // Get timer details for this seat if they are acting
           const seatTimer = isActor && activeTimer?.playerId === seat.playerId ? activeTimer : null;
           let timerPercentage = 0;
@@ -152,13 +152,12 @@ export const PokerTable: React.FC<PokerTableProps> = ({ onSit }) => {
             >
               {isOccupied ? (
                 <div
-                  className={`relative flex flex-col items-center justify-between w-full h-full p-2 rounded-2xl border text-center transition-all ${
-                    seatTimer
+                  className={`relative flex flex-col items-center justify-between w-full h-full p-2 rounded-2xl border text-center transition-all ${seatTimer
                       ? "timer-active-border"
                       : isActor
-                      ? "active-glow border-cyan-400 bg-slate-900/90"
-                      : "border-slate-800 bg-slate-900/90"
-                  } ${handPlayer?.status === "folded" ? "opacity-45" : ""}`}
+                        ? "active-glow border-cyan-400 bg-slate-900/90"
+                        : "border-slate-800 bg-slate-900/90"
+                    } ${handPlayer?.status === "folded" ? "opacity-45" : ""}`}
                   style={seatTimer ? { "--timer-pct": `${timerPercentage}%` } as React.CSSProperties : undefined}
                 >
 
@@ -169,22 +168,23 @@ export const PokerTable: React.FC<PokerTableProps> = ({ onSit }) => {
 
                   {/* Hole Cards */}
                   {handPlayer && handPlayer.status !== "folded" && (
-                    <div className="absolute -top-10 flex gap-1 z-20">
+                    <div className="absolute -top-14 flex gap-1 z-20">
                       {handPlayer.cards.map((card, cardIdx) =>
                         card ? (
                           <div
                             key={cardIdx}
-                            className={`card suit-${card.suit} !w-[36px] !h-[50px] !text-xs`}
+                            className={`card suit-${card.suit} !w-[36px] !h-[50px] !text-xs flex-shrink-0 flex flex-col justify-between p-1`}
                           >
-                            <div className="leading-none">{card.rank}</div>
-                            <div className="text-center leading-none text-sm">
+                            <div className="text-left leading-none">{card.rank}</div>
+                            <div className="text-center leading-none text-[10px]">
                               {renderSuitSymbol(card.suit)}
                             </div>
+                            <div className="text-right leading-none rotate-180">{card.rank}</div>
                           </div>
                         ) : (
                           <div
                             key={cardIdx}
-                            className="card card-back !w-[36px] !h-[50px]"
+                            className="card card-back !w-[36px] !h-[50px] flex-shrink-0"
                           ></div>
                         )
                       )}

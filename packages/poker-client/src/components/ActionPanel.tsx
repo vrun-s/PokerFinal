@@ -137,12 +137,12 @@ export const ActionPanel: React.FC = () => {
       {/* Main gameplay action controls panel */}
       {isMyTurn ? (
         <div className="flex flex-col md:flex-row gap-6 items-center justify-between border-t border-slate-900 pt-4">
-          <div className="flex gap-3 w-full md:w-auto">
+          <div className="action-btn-group w-full md:w-auto">
             {foldAction && (
               <button
                 disabled={!isConnected}
                 onClick={() => handleAction("fold")}
-                className="btn-poker flex-1 md:flex-none border-red-900/30 text-red-400 bg-red-950/10 hover:bg-red-900/20"
+                className="action-btn-poker fold"
               >
                 Fold
               </button>
@@ -152,7 +152,7 @@ export const ActionPanel: React.FC = () => {
               <button
                 disabled={!isConnected}
                 onClick={() => handleAction("check")}
-                className="btn-poker flex-1 md:flex-none border-cyan-900/30 text-cyan-400 bg-cyan-950/10 hover:bg-cyan-900/20"
+                className="action-btn-poker check"
               >
                 Check
               </button>
@@ -162,7 +162,7 @@ export const ActionPanel: React.FC = () => {
               <button
                 disabled={!isConnected}
                 onClick={() => handleAction("call")}
-                className="btn-poker flex-1 md:flex-none primary"
+                className="action-btn-poker call"
               >
                 Call ${callAction.callAmount}
               </button>
@@ -200,7 +200,7 @@ export const ActionPanel: React.FC = () => {
                 <button
                   disabled={!isConnected}
                   onClick={() => handleAction("raise")}
-                  className="btn-poker primary px-6"
+                  className="action-btn-poker raise"
                 >
                   Raise to ${raiseValue}
                 </button>

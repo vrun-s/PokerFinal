@@ -1,4 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
+@import "tailwindcss";
+
 
 :root {
   --bg-main: #0B0E14;
@@ -11,7 +13,7 @@
   --text-primary: #F3F4F6;
   --text-secondary: #9CA3AF;
   --text-gold: #FFD700;
-  
+
   font-family: 'Outfit', sans-serif;
   color-scheme: dark;
   background-color: var(--bg-main);
@@ -49,9 +51,10 @@ body {
   aspect-ratio: 16 / 9;
   background: var(--bg-table);
   border: 10px solid var(--table-border);
-  border-radius: 500px; /* Oval felt */
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 
-              inset 0 0 100px rgba(0, 0, 0, 0.7);
+  border-radius: 500px;
+  /* Oval felt */
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8),
+    inset 0 0 100px rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -80,12 +83,42 @@ body {
 }
 
 /* 6-max seating layout percentages */
-.seat-0 { top: 90%; left: 50%; }  /* Bottom / Hero */
-.seat-1 { top: 60%; left: 10%; }  /* Left Bottom */
-.seat-2 { top: 25%; left: 15%; }  /* Left Top */
-.seat-3 { top: 10%; left: 50%; }  /* Top */
-.seat-4 { top: 25%; left: 85%; }  /* Right Top */
-.seat-5 { top: 60%; left: 90%; }  /* Right Bottom */
+.seat-0 {
+  top: 90%;
+  left: 50%;
+}
+
+/* Bottom / Hero */
+.seat-1 {
+  top: 60%;
+  left: 10%;
+}
+
+/* Left Bottom */
+.seat-2 {
+  top: 25%;
+  left: 15%;
+}
+
+/* Left Top */
+.seat-3 {
+  top: 10%;
+  left: 50%;
+}
+
+/* Top */
+.seat-4 {
+  top: 25%;
+  left: 85%;
+}
+
+/* Right Top */
+.seat-5 {
+  top: 60%;
+  left: 90%;
+}
+
+/* Right Bottom */
 
 /* Cards layout styling */
 .card-container {
@@ -109,11 +142,13 @@ body {
   animation: dealIn 0.3s ease-out;
 }
 
-.card.suit-hearts, .card.suit-diamonds {
+.card.suit-hearts,
+.card.suit-diamonds {
   color: #DC2626;
 }
 
-.card.suit-spades, .card.suit-clubs {
+.card.suit-spades,
+.card.suit-clubs {
   color: #1F2937;
 }
 
@@ -179,6 +214,7 @@ body {
     transform: translateY(-50px) rotate(15deg);
     opacity: 0;
   }
+
   to {
     transform: translateY(0) rotate(0);
     opacity: 1;
@@ -195,7 +231,8 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-radius: 490px; /* oval overlay */
+  border-radius: 490px;
+  /* oval overlay */
 }
 
 .spinner {
@@ -209,6 +246,113 @@ body {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Center Felt Positioning */
+.table-center-felt {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Gameplay Action Buttons Styling */
+.action-btn-group {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 16px !important;
+  /* 16px spacing as requested */
+  align-items: center !important;
+  justify-content: flex-start !important;
+}
+
+.action-btn-poker {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 14px 28px !important;
+  /* Larger, easy-to-click target */
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 120px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.action-btn-poker:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Fold Button - Crimson Accent */
+.action-btn-poker.fold {
+  background-color: #2a1215 !important;
+  color: #fca5a5 !important;
+  border: 1px solid #7f1d1d !important;
+}
+
+.action-btn-poker.fold:hover:not(:disabled) {
+  background-color: #451a20 !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.2);
+}
+
+/* Check Button - Slate/Grey Accent */
+.action-btn-poker.check {
+  background-color: #1e293b !important;
+  color: #cbd5e1 !important;
+  border: 1px solid #475569 !important;
+}
+
+.action-btn-poker.check:hover:not(:disabled) {
+  background-color: #334155 !important;
+  border-color: #94a3b8 !important;
+  box-shadow: 0 0 12px rgba(148, 163, 184, 0.2);
+}
+
+/* Call Button - Emerald/Green Accent */
+.action-btn-poker.call {
+  background-color: #064e3b !important;
+  color: #6ee7b7 !important;
+  border: 1px solid #047857 !important;
+}
+
+.action-btn-poker.call:hover:not(:disabled) {
+  background-color: #065f46 !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+}
+
+/* Raise Button - Gold/Orange Accent */
+.action-btn-poker.raise {
+  background-color: #78350f !important;
+  color: #fde047 !important;
+  border: 1px solid #a16207 !important;
+}
+
+.action-btn-poker.raise:hover:not(:disabled) {
+  background-color: #92400e !important;
+  border-color: #eab308 !important;
+  box-shadow: 0 0 15px rgba(234, 179, 8, 0.3);
 }
