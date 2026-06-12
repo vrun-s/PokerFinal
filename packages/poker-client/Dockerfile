@@ -1,5 +1,12 @@
 # Stage 1: Build the workspace
 FROM node:20-alpine AS builder
+
+# Build-time environment variables for Vite SPA compile injection
+ARG VITE_SOCKET_URL
+ARG VITE_API_URL
+ENV VITE_SOCKET_URL=$VITE_SOCKET_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 WORKDIR /app
 
 # Copy root configurations and dependency manifests

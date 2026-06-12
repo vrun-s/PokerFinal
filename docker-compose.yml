@@ -50,6 +50,9 @@ services:
     build:
       context: .
       dockerfile: packages/poker-client/Dockerfile
+      args:
+        - VITE_SOCKET_URL=${VITE_SOCKET_URL:-}
+        - VITE_API_URL=${VITE_API_URL:-}
     ports:
       - "8080:80"
     depends_on:
