@@ -75,6 +75,7 @@ describe("Timeout Manager & Time Banks", () => {
       timeBankLeft: 30,
       isTimeBank: false,
       isPaused: false,
+      maxTimeLeft: 15,
     });
 
     clearTimer("1");
@@ -99,6 +100,7 @@ describe("Timeout Manager & Time Banks", () => {
       isTimeBank: false,
       isPaused: true,
       graceTimeLeft: 4,
+      maxTimeLeft: 15,
     });
 
     // Advance 4 more seconds -> grace period expires (graceTimeLeft reaches 0)
@@ -110,6 +112,7 @@ describe("Timeout Manager & Time Banks", () => {
       timeBankLeft: 30,
       isTimeBank: false,
       isPaused: false,
+      maxTimeLeft: 15,
     });
 
     clearTimer("1");
@@ -137,6 +140,7 @@ describe("Timeout Manager & Time Banks", () => {
       timeBankLeft: 30,
       isTimeBank: false,
       isPaused: false,
+      maxTimeLeft: 15,
     });
 
     clearTimer("1");
@@ -154,6 +158,7 @@ describe("Timeout Manager & Time Banks", () => {
       timeBankLeft: 2,
       isTimeBank: false, // transition tick
       isPaused: false,
+      maxTimeLeft: 15,
     });
 
     const flushPromises = () => new Promise(resolve => process.nextTick(resolve));
@@ -168,6 +173,7 @@ describe("Timeout Manager & Time Banks", () => {
       timeBankLeft: 1,
       isTimeBank: true,
       isPaused: false,
+      maxTimeLeft: 30,
     });
 
     // Advance 1 second -> consumes remaining time bank and triggers action
@@ -180,6 +186,7 @@ describe("Timeout Manager & Time Banks", () => {
       timeBankLeft: 0,
       isTimeBank: true,
       isPaused: false,
+      maxTimeLeft: 30,
     });
 
     // Wait for the asynchronous processTableAction to resolve

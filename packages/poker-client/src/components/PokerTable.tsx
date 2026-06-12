@@ -135,7 +135,12 @@ export const PokerTable: React.FC<PokerTableProps> = ({ onSit }) => {
           
           // Get timer details for this seat if they are acting
           const seatTimer = isActor && activeTimer?.playerId === seat.playerId ? activeTimer : null;
-          const timerPercentage = seatTimer ? (seatTimer.timeLeft / 15) * 100 : 0;
+          let timerPercentage = 0;
+          if (seatTimer) {
+            const maxTime = seatTimer.maxTimeLeft || (seatTimer.isTimeBank ? 30 : 15);
+            const currentValue = seatTimer.isTimeBank ? seatTimer.timeBankLeft : seatTimer.timeLeft;
+            timerPercentage = (currentValue / maxTime) * 100;
+          }
 
           // Is dealer button at this seat?
           const isDealer = hand ? hand.config.dealerIndex === hand.players.findIndex(p => p.id === seat.playerId) : tableState.dealerIndex === seat.index;
@@ -147,14 +152,15 @@ export const PokerTable: React.FC<PokerTableProps> = ({ onSit }) => {
             >
               {isOccupied ? (
                 <div
-                  className={`relative flex flex-col items-center justify-between w-full h-full p-2 rounded-2xl border bg-slate-900/90 text-center transition-all ${
-                    isActor ? "active-glow border-cyan-400" : "border-slate-800"
+                  className={`relative flex flex-col items-center justify-between w-full h-full p-2 rounded-2xl border text-center transition-all ${
+                    seatTimer
+                      ? "timer-active-border"
+                      : isActor
+                      ? "active-glow border-cyan-400 bg-slate-900/90"
+                      : "border-slate-800 bg-slate-900/90"
                   } ${handPlayer?.status === "folded" ? "opacity-45" : ""}`}
+                  style={seatTimer ? { "--timer-pct": `${timerPercentage}%` } as React.CSSProperties : undefined}
                 >
-                  {/* Timer Circular Countdown Bar background color indicator */}
-                  {seatTimer && (
-                    <div className="absolute inset-0 border-2 border-cyan-400 rounded-2xl pointer-events-none opacity-40 animate-pulse"></div>
-                  )}
 
                   {/* Player Name */}
                   <div className="text-sm font-semibold truncate max-w-[110px] text-white">

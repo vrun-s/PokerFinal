@@ -164,6 +164,15 @@ body {
   border: 2px solid var(--primary-accent) !important;
 }
 
+/* Active Player Timer Progress Border */
+.timer-active-border {
+  border: 2px solid transparent !important;
+  background-image: linear-gradient(#0f172a, #0f172a), conic-gradient(var(--primary-accent) var(--timer-pct), #1e293b var(--timer-pct)) !important;
+  background-origin: border-box !important;
+  background-clip: padding-box, border-box !important;
+  box-shadow: 0 0 20px 4px var(--accent-glow) !important;
+}
+
 /* Animations */
 @keyframes dealIn {
   from {

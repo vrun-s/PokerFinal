@@ -78,6 +78,7 @@ export async function startPlayerTimer(io: Server, tableId: string, playerId: st
           isTimeBank: false,
           isPaused: true,
           graceTimeLeft: currentTimer.graceTimeLeft,
+          maxTimeLeft: config.ACTION_TIMEOUT_SECONDS,
         });
         return;
       }
@@ -91,6 +92,7 @@ export async function startPlayerTimer(io: Server, tableId: string, playerId: st
         timeBankLeft: currentTimer.timeBankLeft,
         isTimeBank: false,
         isPaused: false,
+        maxTimeLeft: config.ACTION_TIMEOUT_SECONDS,
       });
     } else if (currentTimer.timeBankLeft > 0) {
       currentTimer.timeBankLeft--;
@@ -101,6 +103,7 @@ export async function startPlayerTimer(io: Server, tableId: string, playerId: st
         timeBankLeft: currentTimer.timeBankLeft,
         isTimeBank: true,
         isPaused: false,
+        maxTimeLeft: config.TIME_BANK_DEFAULT_SECONDS,
       });
     } else {
       // Timer and Time Bank expired -> Trigger automatic timeout action

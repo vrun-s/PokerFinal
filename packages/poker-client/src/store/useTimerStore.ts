@@ -7,6 +7,7 @@ export interface ActiveTimer {
   readonly isPaused: boolean;
   readonly isTimeBank?: boolean;
   readonly graceTimeLeft?: number;
+  readonly maxTimeLeft?: number;
 }
 
 interface TimerStore {
