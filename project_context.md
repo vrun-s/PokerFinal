@@ -287,7 +287,7 @@ The Server Network Sync Layer bridges the pure, immutable poker engines (`poker-
 - **`subscribe_table(tableId, token)`**: Validates the token and joins the room. Emits the client-sanitized `table_state`. Resumes the active timer if the player was previously disconnected.
 - **`join_table(tableId, token, name, buyIn, seatIndex, handActionSeq)`**: Deducts the buy-in from PostgreSQL, seats the player, and joins the socket room.
 - **`game_action(tableId, playerId, action, handActionSeq)`**: Dispatches player actions after validating authorization.
-- **`timer_tick`**: Emitted by the server every second to broadcast the acting player's remaining action time, time bank status, and disconnection grace period.
+- **`timer_tick`**: Emitted by the server every second to broadcast the acting player's remaining action time, time bank status, disconnection grace period, and the corresponding maximum duration of the active phase (`maxTimeLeft`).
 - **`table_state`**: Emitted to clients with sensitive details masked unless in the `Showdown` round and the player has not folded. Includes `stateVersion` (table's `handActionSeq`) and `legalActions` calculated authoritatively for the active actor's seat.
 
 ---
@@ -336,8 +336,8 @@ To guarantee container boot reliability and eliminate manual configuration:
 - During build, `scripts/copySchema.js` automatically moves the schema from `/src/db/schema.sql` to `/dist/db/schema.sql`. The server dynamically locates the schema path at runtime relative to the compiled module using ESM `import.meta.url` file URL utilities.
 
 ### D. Production Environment Variables
-- **VITE_SOCKET_URL**: Allows setting an external socket origin for the frontend client in cloud production environments (e.g., Vercel, Netlify). If left undefined, the client falls back to `window.location.origin`.
-- **VITE_API_URL**: Prefixes HTTP/REST auth endpoints for hosting. If undefined, defaults to relative routing.
+- **VITE_SOCKET_URL**: Allows setting an external socket origin for the frontend client in cloud production environments (e.g., Vercel, Netlify). If left undefined, the client falls back to `window.location.origin`. It is declared as an `ARG` in the client's `Dockerfile` and passed via `docker-compose.yml` to be injected at build-time.
+- **VITE_API_URL**: Prefixes HTTP/REST auth endpoints for hosting. If undefined, defaults to relative routing. It is declared as an `ARG` in the client's `Dockerfile` and passed via `docker-compose.yml` to be injected at build-time.
 
 ### E. Connection Resilience & UI Error Handlers
 - **Reconnection Overlay**: In the event of network disruption, the client store transitions `connectionStatus`. If `disconnected`, a warning overlay blocks inputs and presents a "Manual Reconnect" action to trigger re-subscription.

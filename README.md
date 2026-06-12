@@ -113,9 +113,10 @@ Navigate to [http://localhost:8080](http://localhost:8080) to start playing.
 
 ---
 
-## 5. Server Configuration & Environment
+## 5. Server & Client Configuration & Environment
 
-The real-time server uses the following environment variables (configured via `.env` in `packages/poker-server/`):
+### A. Real-Time Server Environment Variables
+The server uses the following environment variables (configured via `.env` in `packages/poker-server/`):
 
 | Variable | Description | Default |
 | :--- | :--- | :--- |
@@ -126,6 +127,14 @@ The real-time server uses the following environment variables (configured via `.
 | `TIME_BANK_DEFAULT_SECONDS` | Default extra time-bank allocated per player | `30` |
 | `DISCONNECT_GRACE_PAUSE_SECONDS`| Delay before acting on a disconnected player | `5` |
 | `AUTH_SECRET` | HMAC signature key for player tokens | `poker-server-secret-key-12345` |
+
+### B. Client Build-Time Environment Variables
+Vite compiles these variables into the static SPA bundle at build-time. They are declared as stage-scoped `ARG` variables inside `packages/poker-client/Dockerfile` and passed via `docker-compose.yml` build configurations:
+
+| Variable | Description | Default / Fallback |
+| :--- | :--- | :--- |
+| `VITE_SOCKET_URL` | Socket.io server connection origin URL | `window.location.origin` (proxied via Nginx) |
+| `VITE_API_URL` | API auth server base path / origin prefix | `""` (relative prefix proxied via Nginx) |
 
 ---
 
@@ -201,7 +210,8 @@ All client actions must be authorized using the token generated during REST auth
      "timeLeft": 12,
      "timeBankLeft": 30,
      "isTimeBank": false,
-     "isPaused": false
+     "isPaused": false,
+     "maxTimeLeft": 15
    }
    ```
 3. **`error`**: Emitted if an action is rejected or invalid (e.g., `{ "message": "Out of sync action sequence" }`).

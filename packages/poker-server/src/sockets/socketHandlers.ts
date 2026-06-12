@@ -10,8 +10,9 @@ import {
 } from "../services/timeoutManager.js";
 import crypto from "crypto";
 import { logger } from "../services/logger.js";
+import { config } from "../config.js";
 
-const AUTH_SECRET = process.env.AUTH_SECRET || "poker-server-secret-key-12345";
+const AUTH_SECRET = config.AUTH_SECRET;
 
 export function generatePlayerToken(playerId: string): string {
   const hash = crypto.createHmac("sha256", AUTH_SECRET).update(playerId).digest("hex");

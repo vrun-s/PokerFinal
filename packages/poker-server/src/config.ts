@@ -9,4 +9,5 @@ export const config = {
   ACTION_TIMEOUT_SECONDS: parseInt(process.env.ACTION_TIMEOUT_SECONDS || "15", 10),
   TIME_BANK_DEFAULT_SECONDS: parseInt(process.env.TIME_BANK_DEFAULT_SECONDS || "30", 10),
   DISCONNECT_GRACE_PAUSE_SECONDS: parseInt(process.env.DISCONNECT_GRACE_PAUSE_SECONDS || "5", 10),
+  AUTH_SECRET: process.env.AUTH_SECRET || "poker-server-secret-key-12345",
 };

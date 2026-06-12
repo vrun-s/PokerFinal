@@ -6,7 +6,7 @@ import { sendGameAction } from "../services/socketEvents.ts";
 export const ActionPanel: React.FC = () => {
   const { tableState, connectionStatus } = useTableStore();
   const { playerId, seatIndex } = useSessionStore();
-  
+
   const [raiseValue, setRaiseValue] = useState<number>(0);
   const [buyInAmount, setBuyInAmount] = useState<number>(200);
 
@@ -73,8 +73,6 @@ export const ActionPanel: React.FC = () => {
     if (!isConnected) return;
     sendGameAction({ type: "sitIn", playerId });
   };
-
-
 
   const isSittingOut = tableState.seats.find(s => s.playerId === playerId)?.status === "sitting-out";
 
@@ -184,7 +182,7 @@ export const ActionPanel: React.FC = () => {
                 onChange={(e) => setRaiseValue(parseInt(e.target.value) || minRaise)}
                 className="w-full h-1.5 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-cyan-400"
               />
-              
+
               <div className="flex items-center gap-2 whitespace-nowrap">
                 <input
                   type="number"
@@ -198,7 +196,7 @@ export const ActionPanel: React.FC = () => {
                   }}
                   className="w-20 px-2 py-1 bg-slate-900 border border-slate-800 rounded text-center text-white"
                 />
-                
+
                 <button
                   disabled={!isConnected}
                   onClick={() => handleAction("raise")}

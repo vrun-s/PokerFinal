@@ -51,7 +51,7 @@ export async function creditPlayerBalance(client: pg.PoolClient, playerId: strin
 export async function upsertPlayer(client: pg.PoolClient, id: string, name: string, balance: number): Promise<void> {
   await client.query(
     `INSERT INTO players (id, name, balance) VALUES ($1, $2, $3)
-     ON CONFLICT (id) DO UPDATE SET name = $2, balance = $3`,
+     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
     [id, name, balance]
   );
 }
