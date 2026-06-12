@@ -74,15 +74,7 @@ export const ActionPanel: React.FC = () => {
     sendGameAction({ type: "sitIn", playerId });
   };
 
-  const handleAddChips = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isConnected) return;
-    sendGameAction({
-      type: "addChips",
-      playerId,
-      amount: buyInAmount,
-    });
-  };
+
 
   const isSittingOut = tableState.seats.find(s => s.playerId === playerId)?.status === "sitting-out";
 
@@ -117,19 +109,25 @@ export const ActionPanel: React.FC = () => {
               </button>
             )}
 
-            {/* Top-up form */}
-            <form onSubmit={handleAddChips} className="flex items-center gap-2">
+            {/* Top-up container */}
+            <div className="flex items-center gap-2">
               <input
                 type="number"
                 disabled={!isConnected}
                 value={buyInAmount}
                 onChange={(e) => setBuyInAmount(parseInt(e.target.value) || 0)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (isConnected) sendGameAction({ type: "addChips", playerId, amount: buyInAmount }); } }}
                 className="w-20 px-2.5 py-1 bg-slate-900/80 border border-slate-800 rounded text-sm text-center text-white focus:outline-none focus:border-cyan-500"
               />
-              <button type="submit" disabled={!isConnected} className="btn-poker">
+              <button
+                type="button"
+                disabled={!isConnected}
+                onClick={() => { if (isConnected) sendGameAction({ type: "addChips", playerId, amount: buyInAmount }); }}
+                className="btn-poker"
+              >
                 + Chips
               </button>
-            </form>
+            </div>
 
             <button disabled={!isConnected} onClick={handleLeave} className="btn-poker text-red-400 bg-red-950/20 hover:bg-red-900/30 border-red-900/40">
               Leave Seat
