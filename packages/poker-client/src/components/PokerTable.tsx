@@ -4,6 +4,7 @@ import { useSessionStore } from "../store/useSessionStore.ts";
 import { useTimerStore } from "../store/useTimerStore.ts";
 import { socket } from "../services/socket.ts";
 import { subscribeToTable } from "../services/socketEvents.ts";
+import { WinnerBanner } from "./WinnerBanner.tsx";
 
 interface PokerTableProps {
   onSit: (seatIndex: number) => void;
@@ -90,6 +91,8 @@ export const PokerTable: React.FC<PokerTableProps> = ({ onSit }) => {
 
         {/* Center Felt - Pots & Board Cards */}
         <div className="table-center-felt">
+          <WinnerBanner />
+
           {/* Main Pot */}
           {totalPot > 0 && (
             <div className="glass-panel px-4 py-1.5 rounded-full flex items-center gap-2 text-sm font-semibold border-amber-500/20">
