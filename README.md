@@ -1,6 +1,6 @@
 # Texas Hold'em Poker Platform Monorepo
 
-[![Live Demo](https://img.shields.io/badge/Demo-Live_Site-cyan?style=for-the-badge)](https://poker-arena.example.com)
+[![Live Demo](https://img.shields.io/badge/Demo-Live_Site-cyan?style=for-the-badge)](https://poker-client.fly.dev/)
 [![Docker Compose Setup](https://img.shields.io/badge/Local_Setup-Docker_Compose-blueviolet?style=for-the-badge)](#6-local-development-via-docker-compose)
 
 Welcome to the production-grade, real-time Texas Hold'em Poker Platform monorepo. This repository contains the complete Texas Hold'em engine and real-time multiplayer network sync layer, organized as an npm workspaces monorepo.
