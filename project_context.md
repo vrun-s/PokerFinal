@@ -369,6 +369,9 @@ Phases 8 & 9 establish user session authentication, database-driven wallet persi
 - The React client renders `<Lobby />` as the root screen when no `tableId` is active. Seated player counts poll every 5 seconds from `GET /api/tables`.
 - A "Lobby" button in the table header allows players to safely leave and return to the lobby, triggering immediate database cashing out if idle.
 
+
+
+
 ### C. Post-Hand History & Leaderboards
 - The `GET /api/tables/:id/history` endpoint retrieves the last 10 completed hands for a table from PostgreSQL, requiring the client to present a valid Bearer token inside the `Authorization` header.
 - The collapsible `<HistoryPanel />` renders recent hands, dynamically evaluating showdown winners and hand classifications on the client side using core library helpers.
