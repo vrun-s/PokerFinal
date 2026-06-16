@@ -1,0 +1,19 @@
+app = 'poker-client'
+primary_region = 'sin'
+
+  [build.args]
+    VITE_SOCKET_URL = "https://poker-server-silent-pine-9501.fly.dev"
+    VITE_API_URL = "https://poker-server-silent-pine-9501.fly.dev"
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1
