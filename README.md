@@ -221,3 +221,29 @@ All client actions must be authorized using the token generated during REST auth
    }
    ```
 3. **`error`**: Emitted if an action is rejected or invalid (e.g., `{ "message": "Out of sync action sequence" }`).
+
+---
+
+## 7. Cloud Deployment (Fly.io & Upstash Redis)
+
+To host the platform online within free tier constraints (Fly.io + Upstash Redis), the following production architecture is configured:
+
+### A. Server Deployment (`poker-server`)
+* **Scale Count**: The server must run on **exactly 1 machine** to prevent concurrent active-hand timers (`setInterval`) from executing on multiple nodes. This also keeps Redis reads/writes strictly within Upstash's free quota of 10,000 requests/day.
+  ```bash
+  fly scale count 1 --app <poker-server-app-name>
+  ```
+* **Host Binding**: Set to listen on `0.0.0.0` in [server.ts](file:///c:/College/Poker/packages/poker-server/src/server.ts) to accept routing from the Fly proxy.
+* **Database & Redis Secrets**: Connection URIs (`DATABASE_URL`, `REDIS_URL`) and `AUTH_SECRET` are managed as secure Fly secrets.
+
+### B. Client Deployment (`poker-client`)
+* **Nginx Configuration**: Simplified [nginx.conf](file:///c:/College/Poker/packages/poker-client/nginx.conf) to serve purely static assets. Direct connections to the server are used instead of local reverse proxying, preventing Nginx from crashing at startup due to unresolvable internal hostnames.
+* **Build Arguments**: Envs are injected during Vite compilation using `[build.args]` in [fly.toml](file:///c:/College/Poker/packages/poker-client/fly.toml):
+  ```toml
+  [build.args]
+    VITE_SOCKET_URL = "https://<poker-server-app-name>.fly.dev"
+    VITE_API_URL = "https://<poker-server-app-name>.fly.dev"
+  ```
+* **WebSockets Optimization**: Force-enabled WebSocket-only connections (`transports: ["websocket"]` in [socket.ts](file:///c:/College/Poker/packages/poker-client/src/services/socket.ts)) to bypass HTTP polling and resolve routing handshake delays on Fly.io's proxy.
+* **Resource Optimization**: Reduced client VM memory allocation to `256mb` in [fly.toml](file:///c:/College/Poker/packages/poker-client/fly.toml) to stay within the Fly.io free tier resource envelope.
+

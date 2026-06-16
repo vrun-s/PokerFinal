@@ -344,6 +344,13 @@ To guarantee container boot reliability and eliminate manual configuration:
 - **Action Locking**: When `connectionStatus !== "connected"`, the client disables all voluntary game buttons and input sliders in `ActionPanel.tsx` and wraps input handlers with connection state guards.
 - **Dynamic Error Banners**: Dispatched socket errors from the server are saved as `errorMessage` in the Zustand table store, displaying a temporary toast banner at the top of the table.
 
+### F. Production Deployment (Fly.io & Upstash Redis)
+For production hosting, the configuration is optimized to run on the Fly.io free tier:
+- **Server Instance Limit**: The server is scaled to exactly **1 machine** to prevent concurrent active-hand timers (`setInterval`) from executing on multiple nodes. This ensures that only a single instance writes tick operations and player time bank updates to Upstash Redis, preventing daily request quota exhaustion.
+- **WebSocket-Only Connection**: Sockets are configured to use WebSocket-only transport (`transports: ["websocket"]`) to bypass proxy/polling upgrades and connect reliably to the Fly.io server load balancer.
+- **Client Resource Tuning**: The client container is allocated `256mb` of RAM (reduced from 1GB), perfectly serving static files via Nginx while remaining strictly inside Fly.io's free tier resources.
+- **Portable Nginx routing**: The client Nginx proxy configuration is stripped of custom hardcoded upstream proxy-pass hosts, preventing startup resolution failure crashes. Vite-compiled build-time build args inject the public API/Socket URLs directly.
+
 ---
 
 ## 10. User Authentication, Wallet Persistence & Multi-Table Lobby (Phases 8 & 9)
