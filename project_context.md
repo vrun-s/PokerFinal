@@ -344,4 +344,34 @@ To guarantee container boot reliability and eliminate manual configuration:
 - **Action Locking**: When `connectionStatus !== "connected"`, the client disables all voluntary game buttons and input sliders in `ActionPanel.tsx` and wraps input handlers with connection state guards.
 - **Dynamic Error Banners**: Dispatched socket errors from the server are saved as `errorMessage` in the Zustand table store, displaying a temporary toast banner at the top of the table.
 
+---
+
+## 10. User Authentication, Wallet Persistence & Multi-Table Lobby (Phases 8 & 9)
+
+Phases 8 & 9 establish user session authentication, database-driven wallet persistence, multiple table configurations, post-hand histories, real-time balance sync, and security controls.
+
+### A. Authentication & Registration Routes
+- `/api/register` and `/api/login` endpoints authenticate players and generate signed HMAC tokens (`{playerId}.{signature}`).
+- Fastify rate limiting restricts registration and login attempts to 5 requests per minute per IP address, preventing brute-force attacks.
+
+### B. Multi-Table Selections & Lobby View
+- The system supports 3 seeded tables (`STATIC_TABLE_IDS = ["1", "2", "3"]`) with varying blind stakes and buy-in limits:
+  - Table 1: $1/$2 Blinds, $100-$1000 Buy-in.
+  - Table 2: $5/$10 Blinds, $500-$5000 Buy-in.
+  - Table 3: $10/$20 Blinds, $1000-$10000 Buy-in.
+- The React client renders `<Lobby />` as the root screen when no `tableId` is active. Seated player counts poll every 5 seconds from `GET /api/tables`.
+- A "Lobby" button in the table header allows players to safely leave and return to the lobby, triggering immediate database cashing out if idle.
+
+### C. Post-Hand History & Leaderboards
+- The `GET /api/tables/:id/history` endpoint retrieves the last 10 completed hands for a table from PostgreSQL, requiring the client to present a valid Bearer token inside the `Authorization` header.
+- The collapsible `<HistoryPanel />` renders recent hands, dynamically evaluating showdown winners and hand classifications on the client side using core library helpers.
+- The Lobby displays the Top 10 players leaderboard, fetched via `GET /api/leaderboard`.
+
+### D. Event-Driven Wallet Balance Synchronizations
+- `tableService.ts` is kept as a pure service layer and does not possess any socket references or trigger socket emissions.
+- Socket handlers manage all communications in `socketHandlers.ts`. A personal room named after the player's ID (`playerId`) is joined on connection.
+- After any balance-changing database transaction completes, the socket handler queries the player's new balance and sends the `account_balance` event directly to the player's personal room (`io.to(playerId).emit("account_balance", { balance })`).
+- This event is captured by the client and updates the Zustand store and header balance in real-time.
+
+
 

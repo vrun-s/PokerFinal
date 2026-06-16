@@ -42,22 +42,20 @@ function getRedisKey(tableId: string): string {
   return tableId.startsWith("table:") ? tableId : `table:${tableId}`;
 }
 
+export const STATIC_TABLE_IDS = ["1", "2", "3"];
+
 export async function seedStaticTables(): Promise<void> {
-  const defaultTableConfig = {
-    maxSeats: 6 as const,
-    minBuyIn: 100,
-    maxBuyIn: 1000,
-    smallBlind: 10,
-    bigBlind: 20,
+  const configs: Record<string, { maxSeats: 6 | 9; minBuyIn: number; maxBuyIn: number; smallBlind: number; bigBlind: number }> = {
+    "1": { maxSeats: 6, minBuyIn: 100, maxBuyIn: 1000, smallBlind: 1, bigBlind: 2 },
+    "2": { maxSeats: 6, minBuyIn: 500, maxBuyIn: 5000, smallBlind: 5, bigBlind: 10 },
+    "3": { maxSeats: 6, minBuyIn: 1000, maxBuyIn: 10000, smallBlind: 10, bigBlind: 20 },
   };
 
-  const initialTable = createTable(defaultTableConfig);
-  const staticTables = ["1", "2"];
-
-  for (const tableId of staticTables) {
+  for (const tableId of STATIC_TABLE_IDS) {
     const key = getRedisKey(tableId);
     const exists = await redisClient.exists(key);
     if (!exists) {
+      const initialTable = createTable(configs[tableId]!);
       await redisClient.set(key, JSON.stringify(initialTable));
     }
   }

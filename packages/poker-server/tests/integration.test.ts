@@ -89,6 +89,12 @@ vi.mock("pg", () => {
                 mockBalances.set(playerId, current + amount);
                 return { rows: [] };
               }
+              if (sql.includes("SELECT hand_number, state_log, created_at FROM hand_histories")) {
+                return { rows: [{ hand_number: 1, state_log: { currentHandState: { pots: [{ amount: 100 }], players: [{ id: "P0", name: "Alice", status: "active", cards: [{ rank: "A", suit: "hearts" }, { rank: "K", suit: "diamonds" }] }], communityCards: [] } }, created_at: new Date() }] };
+              }
+              if (sql.includes("SELECT id, name, balance FROM players ORDER BY balance")) {
+                return { rows: [{ id: "P0", name: "Alice", balance: 10000 }, { id: "P1", name: "Bob", balance: 10000 }] };
+              }
               if (sql.includes("BEGIN") || sql.includes("COMMIT") || sql.includes("ROLLBACK")) {
                 return { rows: [] };
               }
@@ -103,7 +109,7 @@ vi.mock("pg", () => {
 });
 
 // Import server now that mock environments are configured
-import { httpServer, io } from "../src/server.js";
+import { app, httpServer, io } from "../src/server.js";
 import {
   initializePubSub,
   registerTableUpdateListener,
@@ -125,6 +131,8 @@ describe("Socket Server Integration", () => {
       bigBlind: 20,
     });
     mockStore.set("table:1", JSON.stringify(initialTable));
+    mockStore.set("table:2", JSON.stringify(initialTable));
+    mockStore.set("table:3", JSON.stringify(initialTable));
 
     // Initialize Pub/Sub subscriber client and channel listeners for tests
     registerTableUpdateListener(async (tableId, state) => {
@@ -157,6 +165,7 @@ describe("Socket Server Integration", () => {
 
       let client1States: any[] = [];
       let client2States: any[] = [];
+      let client1Balances: any[] = [];
 
       client1.connect();
       client2.connect();
@@ -169,6 +178,10 @@ describe("Socket Server Integration", () => {
       // Bob connects and subscribes to Table 1
       client2.on("connect", () => {
         client2.emit("subscribe_table", { tableId: "1", token: bobToken });
+      });
+
+      client1.on("account_balance", (data: any) => {
+        client1Balances.push(data.balance);
       });
 
       client1.on("table_state", (state: any) => {
@@ -249,8 +262,77 @@ describe("Socket Server Integration", () => {
 
       client1.on("error", (err: any) => {
         expect(err.message).toContain("Out of sync action sequence");
-        resolve(); // Success: we validated seating, sanitization, actions, and sequence check!
+        // Verify client1 received account balance updates (at subscription and join_table)
+        expect(client1Balances.length).toBeGreaterThanOrEqual(2);
+        resolve(); // Success: we validated seating, sanitization, actions, sequence check, and balance emissions!
       });
+    });
+  });
+
+  describe("Fastify REST API endpoints & Rate Limiting", () => {
+    it("should fetch static tables info successfully", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/tables",
+      });
+      expect(response.statusCode).toBe(200);
+      const tables = JSON.parse(response.body);
+      expect(tables.length).toBe(3);
+      expect(tables[0].name).toContain("Table #1");
+      expect(tables[1].playersSeated).toBe(0);
+    });
+
+    it("should fetch leaderboard successfully", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/leaderboard",
+      });
+      expect(response.statusCode).toBe(200);
+      const leaders = JSON.parse(response.body);
+      expect(leaders.length).toBe(2);
+      expect(leaders[0].name).toBe("Alice");
+    });
+
+    it("should reject table history requests if unauthenticated", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/tables/1/history",
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it("should fetch table history successfully with valid Bearer token", async () => {
+      const token = generatePlayerToken("P0");
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/tables/1/history",
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const history = JSON.parse(response.body);
+      expect(history.length).toBe(1);
+      expect(history[0].hand_number).toBe(1);
+    });
+
+    it("should trigger rate limiting on register under stress", async () => {
+      const payload = { username: "rate1", displayName: "Rate Limit Test", password: "some_password" };
+      // Inject 5 requests successfully (different user IDs)
+      for (let i = 0; i < 5; i++) {
+        await app.inject({
+          method: "POST",
+          url: "/api/register",
+          payload: { ...payload, username: `rate_${i}` },
+        });
+      }
+      // 6th request triggers rate-limiting (429)
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/register",
+        payload,
+      });
+      expect(response.statusCode).toBe(429);
     });
   });
 });

@@ -91,6 +91,26 @@ export async function logHandHistory(
   );
 }
 
+export async function getTableHandHistory(
+  client: pg.PoolClient,
+  tableId: string
+): Promise<readonly { hand_number: number; state_log: any; created_at: Date }[]> {
+  const res = await client.query(
+    "SELECT hand_number, state_log, created_at FROM hand_histories WHERE table_id = $1 ORDER BY hand_number DESC LIMIT 10",
+    [tableId]
+  );
+  return res.rows;
+}
+
+export async function getLeaderboard(
+  client: pg.PoolClient
+): Promise<readonly { id: string; name: string; balance: number }[]> {
+  const res = await client.query(
+    "SELECT id, name, balance FROM players ORDER BY balance DESC LIMIT 10"
+  );
+  return res.rows;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 

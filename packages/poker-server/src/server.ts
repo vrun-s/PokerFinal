@@ -7,11 +7,15 @@ import {
   redisClient,
   initializePubSub,
   registerTableUpdateListener,
+  STATIC_TABLE_IDS,
+  getTableState,
 } from "./services/redisService.js";
-import { registerSocketHandlers, broadcastTableState, generatePlayerToken } from "./sockets/socketHandlers.js";
+import { registerSocketHandlers, broadcastTableState, generatePlayerToken, verifyPlayerToken } from "./sockets/socketHandlers.js";
 import { syncTimerForTableState } from "./services/timeoutManager.js";
-import { executeTransaction, createPlayer, getPlayerByUsername, initializeDatabaseSchema } from "./services/postgresService.js";
+import { executeTransaction, createPlayer, getPlayerByUsername, initializeDatabaseSchema, getTableHandHistory, getLeaderboard } from "./services/postgresService.js";
 import bcrypt from "bcryptjs";
+import rateLimit from "@fastify/rate-limit";
+
 
 const app = Fastify({
   logger: {
@@ -20,6 +24,11 @@ const app = Fastify({
       ? { target: "pino-pretty" }
       : undefined,
   },
+});
+
+await app.register(rateLimit, {
+  max: 100,
+  timeWindow: "1 minute",
 });
 
 // Configure CORS Headers for REST API
@@ -35,7 +44,14 @@ app.options("/*", async (request, reply) => {
 });
 
 // Register endpoint
-app.post("/api/register", async (request, reply) => {
+app.post("/api/register", {
+  config: {
+    rateLimit: {
+      max: 5,
+      timeWindow: "1 minute"
+    }
+  }
+}, async (request, reply) => {
   try {
     const { username, displayName, password } = request.body as {
       username?: string;
@@ -93,7 +109,14 @@ app.post("/api/register", async (request, reply) => {
 });
 
 // Login endpoint
-app.post("/api/login", async (request, reply) => {
+app.post("/api/login", {
+  config: {
+    rateLimit: {
+      max: 5,
+      timeWindow: "1 minute"
+    }
+  }
+}, async (request, reply) => {
   try {
     const { username, password } = request.body as {
       username?: string;
@@ -130,6 +153,68 @@ app.post("/api/login", async (request, reply) => {
     });
   } catch (err: any) {
     reply.code(500).send({ error: err.message || "Authentication failed" });
+  }
+});
+
+// GET /api/tables
+app.get("/api/tables", async (request, reply) => {
+  try {
+    const tablesInfo = [];
+    for (const tableId of STATIC_TABLE_IDS) {
+      const state = await getTableState(tableId);
+      if (state) {
+        const playersSeated = state.seats.filter(seat => seat.playerId !== null).length;
+        tablesInfo.push({
+          id: tableId,
+          name: `Table #${tableId} ($${state.config.smallBlind}/$${state.config.bigBlind})`,
+          smallBlind: state.config.smallBlind,
+          bigBlind: state.config.bigBlind,
+          minBuyIn: state.config.minBuyIn,
+          maxBuyIn: state.config.maxBuyIn,
+          playersSeated,
+        });
+      }
+    }
+    reply.send(tablesInfo);
+  } catch (err: any) {
+    reply.code(500).send({ error: err.message || "Failed to fetch tables" });
+  }
+});
+
+// GET /api/tables/:id/history
+app.get("/api/tables/:id/history", async (request, reply) => {
+  try {
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      reply.code(401).send({ error: "Missing or invalid authorization token" });
+      return;
+    }
+    const token = authHeader.substring(7);
+    const playerId = verifyPlayerToken(token);
+    if (!playerId) {
+      reply.code(401).send({ error: "Invalid authentication token" });
+      return;
+    }
+
+    const { id: tableId } = request.params as { id: string };
+    const history = await executeTransaction(async (client) => {
+      return await getTableHandHistory(client, tableId);
+    });
+    reply.send(history);
+  } catch (err: any) {
+    reply.code(500).send({ error: err.message || "Failed to fetch table history" });
+  }
+});
+
+// GET /api/leaderboard
+app.get("/api/leaderboard", async (request, reply) => {
+  try {
+    const leaderboard = await executeTransaction(async (client) => {
+      return await getLeaderboard(client);
+    });
+    reply.send(leaderboard);
+  } catch (err: any) {
+    reply.code(500).send({ error: err.message || "Failed to fetch leaderboard" });
   }
 });
 

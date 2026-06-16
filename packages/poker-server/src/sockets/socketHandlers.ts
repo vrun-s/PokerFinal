@@ -11,6 +11,7 @@ import {
 import crypto from "crypto";
 import { logger } from "../services/logger.js";
 import { config } from "../config.js";
+import { executeTransaction, getPlayerBalance } from "../services/postgresService.js";
 
 const AUTH_SECRET = config.AUTH_SECRET;
 
@@ -54,6 +55,17 @@ function validateActionPlayerId(action: TableAction, authenticatedPlayerId: stri
   return action.playerId === authenticatedPlayerId;
 }
 
+export async function emitAccountBalance(io: Server, playerId: string): Promise<void> {
+  try {
+    const balance = await executeTransaction(async (client) => {
+      return await getPlayerBalance(client, playerId);
+    });
+    io.to(playerId).emit("account_balance", { balance });
+  } catch (err: any) {
+    logger.error({ playerId, error: err.message }, "Failed to emit account balance");
+  }
+}
+
 export async function broadcastTableState(io: Server, tableId: string, state: TableState): Promise<void> {
   const room = `table:${tableId}`;
   const sockets = await io.in(room).fetchSockets();
@@ -72,12 +84,13 @@ export function registerSocketHandlers(io: Server) {
       const { tableId, token } = data;
       const playerId = verifyPlayerToken(token);
       if (!playerId) {
-        socket.emit("error", { message: "Invalid authentication token" });
+        socket.emit("error", { code: "UNAUTHORIZED", message: "Invalid authentication token" });
         return;
       }
       socket.data.playerId = playerId;
       socket.data.tableId = tableId;
       await socket.join(`table:${tableId}`);
+      await socket.join(playerId); // Join personal room for single-player target emissions
 
       logger.info({ tableId, playerId }, "Player subscribed to table room");
 
@@ -88,8 +101,9 @@ export function registerSocketHandlers(io: Server) {
       if (state) {
         const sanitized = sanitizeStateForClient(state, playerId);
         socket.emit("table_state", sanitized);
+        await emitAccountBalance(io, playerId); // Sync balance on subscription
       } else {
-        socket.emit("error", { message: "Table not found" });
+        socket.emit("error", { code: "TABLE_NOT_FOUND", message: "Table not found" });
       }
     });
 
@@ -105,13 +119,14 @@ export function registerSocketHandlers(io: Server) {
       const { tableId, token, name, buyIn, seatIndex, handActionSeq } = data;
       const playerId = verifyPlayerToken(token);
       if (!playerId) {
-        socket.emit("error", { message: "Invalid authentication token" });
+        socket.emit("error", { code: "UNAUTHORIZED", message: "Invalid authentication token" });
         return;
       }
 
       socket.data.playerId = playerId;
       socket.data.tableId = tableId;
       await socket.join(`table:${tableId}`);
+      await socket.join(playerId); // Join personal room for single-player target emissions
 
       const joinAction: TableAction = {
         type: "joinTable",
@@ -125,9 +140,10 @@ export function registerSocketHandlers(io: Server) {
 
       if (!res.success) {
         logger.error({ tableId, playerId, error: res.error || "Failed to join table" }, "Player join table action failed");
-        socket.emit("error", { message: res.error || "Failed to join table" });
+        socket.emit("error", { code: "ACTION_REJECTED", message: res.error || "Failed to join table" });
       } else {
         logger.info({ tableId, playerId, seatIndex, buyIn }, "Player successfully joined table");
+        await emitAccountBalance(io, playerId); // Sync balance on join table
       }
     });
 
@@ -142,23 +158,47 @@ export function registerSocketHandlers(io: Server) {
 
       // Enforce authorization check that playerId matches socket data
       if (!socket.data.playerId || playerId !== socket.data.playerId) {
-        socket.emit("error", { message: "Unauthorized action player ID" });
+        socket.emit("error", { code: "UNAUTHORIZED", message: "Unauthorized action player ID" });
         return;
       }
 
       // Enforce check that player ID inside the action matches socket data, and reject forged timeouts
       if (!validateActionPlayerId(action, socket.data.playerId)) {
-        socket.emit("error", { message: "Unauthorized action player ID or invalid action type" });
+        socket.emit("error", { code: "ACTION_REJECTED", message: "Unauthorized action player ID or invalid action type" });
         return;
       }
 
       logger.info({ tableId, playerId, actionType: action.type }, "Received client game action");
 
+      let prePendingLeaves: readonly string[] = [];
+      if (action.type === "startNextHand") {
+        const preState = await getTableState(tableId);
+        if (preState) {
+          prePendingLeaves = preState.pendingLeaves;
+        }
+      }
+
       const res = await processTableAction(tableId, action, handActionSeq);
 
       if (!res.success) {
         logger.error({ tableId, playerId, actionType: action.type, error: res.error || "Action rejected" }, "Client game action rejected");
-        socket.emit("error", { message: res.error || "Action rejected" });
+        socket.emit("error", { code: "ACTION_REJECTED", message: res.error || "Action rejected" });
+      } else {
+        // Sync player balance on operations that affect database state
+        if (action.type === "addChips") {
+          await emitAccountBalance(io, action.playerId);
+        } else if (action.type === "leaveTable") {
+          // If the player left immediately (i.e. not queued in pendingLeaves), sync their balance
+          const isQueued = res.state.pendingLeaves.includes(action.playerId);
+          if (!isQueued) {
+            await emitAccountBalance(io, action.playerId);
+          }
+        } else if (action.type === "startNextHand") {
+          // Sync balances of all players who just left mid-hand and have been cashing out
+          for (const pid of prePendingLeaves) {
+            await emitAccountBalance(io, pid);
+          }
+        }
       }
     });
 

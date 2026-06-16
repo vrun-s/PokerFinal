@@ -123,12 +123,18 @@ export function initializeSocketEvents() {
     useTimerStore.getState().setActiveTimer(timer);
   });
 
+  socket.on("account_balance", (data: { balance: number }) => {
+    useSessionStore.setState({ balance: data.balance });
+  });
+
   socket.on("error", (err: any) => {
     console.error("Socket error received from server:", err);
     const message = typeof err === "string" ? err : err.message || "An unknown error occurred";
-    useTableStore.getState().setErrorMessage(message);
+    const code = typeof err === "object" && err !== null ? err.code : undefined;
+    const displayMessage = code ? `[${code}] ${message}` : message;
+    useTableStore.getState().setErrorMessage(displayMessage);
     setTimeout(() => {
-      if (useTableStore.getState().errorMessage === message) {
+      if (useTableStore.getState().errorMessage === displayMessage) {
         useTableStore.getState().setErrorMessage(null);
       }
     }, 5000);

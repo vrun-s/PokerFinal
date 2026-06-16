@@ -5,6 +5,8 @@ import { PokerTable } from "./components/PokerTable.tsx";
 import { ActionPanel } from "./components/ActionPanel.tsx";
 import { initializeSocketEvents, subscribeToTable, sendGameAction } from "./services/socketEvents.ts";
 import { socket } from "./services/socket.ts";
+import { Lobby } from "./components/Lobby.tsx";
+import { HistoryPanel } from "./components/HistoryPanel.tsx";
 
 export const App: React.FC = () => {
   const { playerId, name, token, tableId, balance, setSession, clearSession } = useSessionStore();
@@ -26,15 +28,16 @@ export const App: React.FC = () => {
       socket.off("table_state");
       socket.off("timer_tick");
       socket.off("error");
+      socket.off("account_balance");
     };
   }, []);
 
-  // Auto-subscribe if we have active session
+  // Auto-subscribe if we have active session and tableId is selected
   useEffect(() => {
-    if (token) {
-      subscribeToTable("1", token);
+    if (token && tableId) {
+      subscribeToTable(tableId, token);
     }
-  }, [token]);
+  }, [token, tableId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,17 +111,25 @@ export const App: React.FC = () => {
   };
 
   const handleSit = (seatIndex: number) => {
-    if (!token) return;
+    if (!token || !tableId) return;
     const buyIn = tableState?.config.minBuyIn || 200;
     
     socket.emit("join_table", {
-      tableId: "1",
+      tableId,
       token,
       name,
       buyIn,
       seatIndex,
       handActionSeq: tableState ? tableState.stateVersion : 0,
     });
+  };
+
+  const handleLeaveTable = () => {
+    if (token && playerId && tableId) {
+      sendGameAction({ type: "leaveTable", playerId });
+    }
+    useSessionStore.setState({ tableId: null, seatIndex: null });
+    useTableStore.setState({ tableState: null });
   };
 
   const handleStartHand = () => {
@@ -240,6 +251,11 @@ export const App: React.FC = () => {
     );
   }
 
+  // If logged in but not at a table, render the Lobby screen
+  if (!tableId) {
+    return <Lobby />;
+  }
+
   const isHandRunning = tableState?.currentHandState !== null;
   const isHandCompleted =
     tableState?.currentHandState &&
@@ -257,7 +273,7 @@ export const App: React.FC = () => {
             POKER ARENA
           </span>
           <span className="text-xs bg-slate-900/80 border border-slate-800 px-3 py-1 rounded-full text-gray-400 font-bold uppercase tracking-wider">
-            Table #1
+            Table #{tableId}
           </span>
         </div>
 
@@ -269,7 +285,7 @@ export const App: React.FC = () => {
             </div>
             {balance !== null && (
               <span className="text-xs bg-emerald-950/40 border border-emerald-900/30 px-3.5 py-1 rounded-full text-emerald-400 font-bold uppercase tracking-wider">
-                Lobby Balance (at login): ${balance}
+                Wallet Balance: ${balance}
               </span>
             )}
           </div>
@@ -284,6 +300,13 @@ export const App: React.FC = () => {
           )}
 
           <button
+            onClick={handleLeaveTable}
+            className="btn-poker text-xs font-semibold text-cyan-400 hover:text-cyan-300 border-cyan-500/20 bg-cyan-950/20"
+          >
+            Lobby
+          </button>
+
+          <button
             onClick={clearSession}
             className="btn-poker text-xs font-semibold text-gray-500 hover:text-gray-300"
           >
@@ -295,6 +318,7 @@ export const App: React.FC = () => {
       {/* Main Board */}
       <main className="flex-1 flex items-center justify-center p-4">
         <PokerTable onSit={handleSit} />
+        <HistoryPanel />
       </main>
 
       {/* Footer / Controls */}
