@@ -186,6 +186,7 @@ describe("Socket Server Integration", () => {
 
       client1.on("table_state", (state: any) => {
         client1States.push(state);
+
         // Once Alice receives initial state, she sits down at Seat 0
         if (client1States.length === 1) {
           expect(state.handActionSeq).toBe(0);
@@ -196,6 +197,28 @@ describe("Socket Server Integration", () => {
             buyIn: 500,
             seatIndex: 0,
             handActionSeq: 0,
+          });
+        }
+
+        // When hand is started
+        if (client1States.length === 4) {
+          expect(state.handActionSeq).toBe(3);
+          expect(state.currentHandState).not.toBeNull();
+
+          // Alice (P0) should see her own cards
+          expect(state.currentHandState.players[0].id).toBe("P0");
+          expect(state.currentHandState.players[0].cards[0]).not.toBeNull();
+
+          // Alice should NOT see Bob's (P1) cards
+          expect(state.currentHandState.players[1].id).toBe("P1");
+          expect(state.currentHandState.players[1].cards).toEqual([null, null]);
+
+          // Now let's verify sequence clock error handling by Alice emitting a stale action (handActionSeq = 0)
+          client1.emit("game_action", {
+            tableId: "1",
+            playerId: "P0",
+            action: { type: "dispatchHandAction", action: { type: "fold", playerId: "P0" } },
+            handActionSeq: 0, // stale
           });
         }
       });
@@ -236,32 +259,12 @@ describe("Socket Server Integration", () => {
         }
       });
 
-      // Listen for updates on client 1 when hand is started
-      client1.on("table_state", (state: any) => {
-        if (client1States.length === 4) {
-          expect(state.handActionSeq).toBe(3);
-          expect(state.currentHandState).not.toBeNull();
-
-          // Alice (P0) should see her own cards
-          expect(state.currentHandState.players[0].id).toBe("P0");
-          expect(state.currentHandState.players[0].cards[0]).not.toBeNull();
-
-          // Alice should NOT see Bob's (P1) cards
-          expect(state.currentHandState.players[1].id).toBe("P1");
-          expect(state.currentHandState.players[1].cards).toEqual([null, null]);
-
-          // Now let's verify sequence clock error handling by Alice emitting a stale action (handActionSeq = 0)
-          client1.emit("game_action", {
-            tableId: "1",
-            playerId: "P0",
-            action: { type: "dispatchHandAction", action: { type: "fold", playerId: "P0" } },
-            handActionSeq: 0, // stale
-          });
-        }
-      });
-
       client1.on("error", (err: any) => {
-        expect(err.message).toContain("Out of sync action sequence");
+        const errorMsg = typeof err === "string" ? err : err.message || "";
+        const errorCode = typeof err === "object" && err !== null ? err.code : undefined;
+
+        expect(errorMsg).toContain("Out of sync action sequence");
+        expect(errorCode).toBe("ACTION_REJECTED");
         // Verify client1 received account balance updates (at subscription and join_table)
         expect(client1Balances.length).toBeGreaterThanOrEqual(2);
         resolve(); // Success: we validated seating, sanitization, actions, sequence check, and balance emissions!
