@@ -117,6 +117,7 @@ export function flushPendingActions(state: TableState): TableState {
   }
 
   // 2. Process joins
+  const failedJoins: PendingJoin[] = [];
   for (const join of state.pendingJoins) {
     const seat = seats[join.seatIndex];
     if (seat && seat.status === "empty") {
@@ -128,6 +129,8 @@ export function flushPendingActions(state: TableState): TableState {
         status: "occupied" as const,
         mustWaitForBB: true,
       };
+    } else {
+      failedJoins.push(join);
     }
   }
 
@@ -136,6 +139,7 @@ export function flushPendingActions(state: TableState): TableState {
     seats,
     pendingJoins: [],
     pendingLeaves: [],
+    failedJoins,
   };
 }
 
@@ -309,8 +313,10 @@ export function assignBlindsAndStart(
  * Pure state reducer for Table Orchestration.
  */
 export function tableReducer(state: TableState, action: TableAction): TableState {
-  const nextState = rawTableReducer(state, action);
-  if (nextState !== state) {
+  // Clear transient failedJoins from incoming state
+  const cleanedState = state.failedJoins ? { ...state, failedJoins: undefined } : state;
+  const nextState = rawTableReducer(cleanedState, action);
+  if (nextState !== cleanedState) {
     return {
       ...nextState,
       handActionSeq: state.handActionSeq + 1,
@@ -326,9 +332,10 @@ function rawTableReducer(state: TableState, action: TableAction): TableState {
       if (action.buyIn < state.config.minBuyIn || action.buyIn > state.config.maxBuyIn) {
         return state;
       }
-      // Check if seat index is valid and empty
+      // Check if seat index is valid and empty, and not taken by a pending join
       const seat = state.seats[action.seatIndex];
-      if (!seat || seat.status !== "empty") {
+      const seatTakenByPendingJoin = state.pendingJoins.some(j => j.seatIndex === action.seatIndex);
+      if (!seat || seat.status !== "empty" || seatTakenByPendingJoin) {
         return state;
       }
       // Check if playerId already seated and not scheduled to leave

@@ -106,6 +106,17 @@ export async function processTableAction(
           }
         }
 
+        // Refund any joins that failed to secure a seat
+        if (nextState.failedJoins) {
+          for (const join of nextState.failedJoins) {
+            await creditPlayerBalance(client, join.playerId, join.buyIn);
+            logger.warn(
+              { tableId, playerId: join.playerId, buyIn: join.buyIn },
+              "Refunded pending join due to seat already taken"
+            );
+          }
+        }
+
         // Log completed hand history to database
         if (state.currentHandState) {
           await logHandHistory(client, tableId, state.handCount + 1, state);
@@ -113,7 +124,8 @@ export async function processTableAction(
       }
 
       // Commit changes to Redis cache
-      await saveTableState(tableId, nextState);
+      const { failedJoins, ...stateToCache } = nextState;
+      await saveTableState(tableId, stateToCache);
       await publishTableUpdate(tableId);
       logger.info({ tableId, action: action.type, playerId: (action as any).playerId }, "Action processed successfully");
       return { success: true, state: nextState };

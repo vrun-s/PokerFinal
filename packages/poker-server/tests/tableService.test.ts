@@ -27,6 +27,23 @@ vi.mock("../src/services/postgresService.js", () => {
   };
 });
 
+// Mock server and socketHandlers to prevent Fastify initialization and socket emission side effects
+vi.mock("../src/server.js", () => {
+  return {
+    io: {
+      to: vi.fn().mockReturnValue({
+        emit: vi.fn(),
+      }),
+    },
+  };
+});
+
+vi.mock("../src/sockets/socketHandlers.js", () => {
+  return {
+    emitAccountBalance: vi.fn(),
+  };
+});
+
 describe("tableService - processTableAction timeout resolution", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -137,5 +154,58 @@ describe("tableService - processTableAction timeout resolution", () => {
     const result = await processTableAction("table-1", { type: "timeout", playerId: "P1" }, 5);
     expect(result.success).toBe(false);
     expect(result.error).toBe("Stale timeout action");
+  });
+
+  it("should refund failedJoins and emit account balances when starting next hand", async () => {
+    const mockState: TableState = {
+      config: { maxSeats: 6, minBuyIn: 100, maxBuyIn: 1000, smallBlind: 10, bigBlind: 20 },
+      seats: [
+        { index: 0, playerId: "P0", name: "Alice", stack: 1000, status: "occupied", mustWaitForBB: false },
+        { index: 1, playerId: "P1", name: "Bob", stack: 1000, status: "occupied", mustWaitForBB: false },
+      ],
+      dealerIndex: 0,
+      handCount: 1,
+      pendingJoins: [
+        { playerId: "P2", name: "Carol", buyIn: 500, seatIndex: 0 },
+      ],
+      pendingLeaves: [],
+      handActionSeq: 5,
+      lastBBSeatIdx: null,
+      currentHandState: {
+        config: { smallBlind: 10, bigBlind: 20, dealerIndex: 0 },
+        deck: [],
+        communityCards: [],
+        players: [
+          { id: "P0", name: "Alice", stack: 990, cards: [null as any, null as any], currentRoundBet: 0, totalHandBet: 10, status: "active", hasActed: true },
+          { id: "P1", name: "Bob", stack: 980, cards: [null as any, null as any], currentRoundBet: 0, totalHandBet: 20, status: "active", hasActed: true },
+        ],
+        currentRound: "Ended",
+        pots: [],
+        currentBet: 20,
+        lastRaiseSize: 20,
+        actorIndex: 0,
+      },
+    };
+
+    mockGetTableState.mockResolvedValue(mockState);
+
+    const postgresModule = await import("../src/services/postgresService.js");
+    const creditSpy = postgresModule.creditPlayerBalance as any;
+
+    const result = await processTableAction("table-1", { type: "startNextHand" }, 5);
+    expect(result.success).toBe(true);
+
+    // Carol's join was failed because seat 0 is occupied, so she should be refunded 500
+    expect(creditSpy).toHaveBeenCalledWith(expect.any(Object), "P2", 500);
+
+    // Verify nextState returns with failedJoins (Carol)
+    expect(result.state.failedJoins).toBeDefined();
+    expect(result.state.failedJoins!.length).toBe(1);
+    expect(result.state.failedJoins![0]!.playerId).toBe("P2");
+
+    // Verify that the cached state did NOT include failedJoins
+    expect(mockSaveTableState).toHaveBeenCalled();
+    const savedState = mockSaveTableState.mock.calls[0][1];
+    expect(savedState.failedJoins).toBeUndefined();
   });
 });

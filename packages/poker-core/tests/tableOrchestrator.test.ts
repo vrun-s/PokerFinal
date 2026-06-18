@@ -668,4 +668,63 @@ describe("Table Orchestrator (Phase 4)", () => {
       expect(table.handActionSeq).toBe(3);
     });
   });
+
+  describe("Pending Join Race Fixes (Phase 10)", () => {
+    it("should reject double queueing for the same seat index mid-hand", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 1000, seatIndex: 0 });
+      table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 1000, seatIndex: 1 });
+      table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
+
+      // Alice & Bob are seated, hand is active.
+      // Carol tries to join seat 2 (empty).
+      table = tableReducer(table, { type: "joinTable", playerId: "P2", name: "Carol", buyIn: 500, seatIndex: 2 });
+      expect(table.pendingJoins.length).toBe(1);
+      expect(table.pendingJoins[0]!.playerId).toBe("P2");
+
+      // David tries to join seat 2 (which already has a pending join).
+      // This should be rejected by the reducer and return the state unchanged.
+      const beforeState = table;
+      table = tableReducer(table, { type: "joinTable", playerId: "P3", name: "David", buyIn: 500, seatIndex: 2 });
+      expect(table).toBe(beforeState); // No change
+      expect(table.pendingJoins.length).toBe(1); // Still only Carol
+    });
+
+    it("should return failedJoins when flushPendingActions is called on state where seat is no longer empty", () => {
+      let table = createTable(config);
+      table = tableReducer(table, { type: "joinTable", playerId: "P0", name: "Alice", buyIn: 1000, seatIndex: 0 });
+      table = tableReducer(table, { type: "joinTable", playerId: "P1", name: "Bob", buyIn: 1000, seatIndex: 1 });
+      table = tableReducer(table, { type: "startNextHand", deck: mockDeck });
+
+      // Add a pending join for seat 2
+      table = tableReducer(table, { type: "joinTable", playerId: "P2", name: "Carol", buyIn: 500, seatIndex: 2 });
+
+      // Bypass raw reducer validation and manually occupy seat 2 to simulate defensive race
+      const manipulatedSeats = table.seats.map(s => {
+        if (s.index === 2) {
+          return {
+            ...s,
+            playerId: "P3",
+            name: "David",
+            stack: 500,
+            status: "occupied" as const,
+          };
+        }
+        return s;
+      });
+      const manipulatedState = { ...table, seats: manipulatedSeats };
+
+      const flushedState = flushPendingActions(manipulatedState);
+
+      // Verify that seat 2 is untouched (still occupied by David)
+      expect(flushedState.seats[2]!.playerId).toBe("P3");
+      expect(flushedState.seats[2]!.name).toBe("David");
+
+      // Verify that Carol's join lands in failedJoins
+      expect(flushedState.failedJoins).toBeDefined();
+      expect(flushedState.failedJoins!.length).toBe(1);
+      expect(flushedState.failedJoins![0]!.playerId).toBe("P2");
+      expect(flushedState.failedJoins![0]!.seatIndex).toBe(2);
+    });
+  });
 });
