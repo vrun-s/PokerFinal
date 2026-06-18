@@ -162,6 +162,12 @@ export function registerSocketHandlers(io: Server) {
         return;
       }
 
+      // Enforce authorization check that tableId matches socket data
+      if (!socket.data.tableId || tableId !== socket.data.tableId) {
+        socket.emit("error", { code: "UNAUTHORIZED", message: "Unauthorized table ID" });
+        return;
+      }
+
       // Enforce check that player ID inside the action matches socket data, and reject forged timeouts
       if (!validateActionPlayerId(action, socket.data.playerId)) {
         socket.emit("error", { code: "ACTION_REJECTED", message: "Unauthorized action player ID or invalid action type" });
@@ -197,6 +203,12 @@ export function registerSocketHandlers(io: Server) {
           // Sync balances of all players who just left mid-hand and have been cashing out
           for (const pid of prePendingLeaves) {
             await emitAccountBalance(io, pid);
+          }
+          // Sync balances of players whose pending joins failed and were refunded
+          if (res.state.failedJoins) {
+            for (const join of res.state.failedJoins) {
+              await emitAccountBalance(io, join.playerId);
+            }
           }
         }
       }

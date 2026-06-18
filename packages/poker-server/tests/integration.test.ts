@@ -272,6 +272,46 @@ describe("Socket Server Integration", () => {
     });
   });
 
+  it("should prevent tableId spoofing on game_action", () => {
+    const charlieToken = generatePlayerToken("P2");
+    const client3 = ClientIO(`http://localhost:${port}`, { autoConnect: false });
+
+    return new Promise<void>((resolve, reject) => {
+      client3.connect();
+
+      let beforeStateStr: string | undefined;
+
+      client3.on("connect", () => {
+        // Charlie subscribes to Table 1
+        client3.emit("subscribe_table", { tableId: "1", token: charlieToken });
+      });
+
+      client3.on("table_state", () => {
+        // Once Charlie gets the table state for Table 1, he tries to spoof Table 2
+        beforeStateStr = mockStore.get("table:2");
+        expect(beforeStateStr).not.toBeUndefined();
+
+        client3.emit("game_action", {
+          tableId: "2", // Spoofed table ID
+          playerId: "P2",
+          action: { type: "startNextHand" },
+          handActionSeq: 0,
+        });
+      });
+
+      client3.on("error", (err: any) => {
+        expect(err.code).toBe("UNAUTHORIZED");
+        expect(err.message).toBe("Unauthorized table ID");
+
+        // Verify table 2 state is completely unchanged
+        const afterStateStr = mockStore.get("table:2");
+        expect(afterStateStr).toBe(beforeStateStr);
+        client3.disconnect();
+        resolve();
+      });
+    });
+  });
+
   describe("Fastify REST API endpoints & Rate Limiting", () => {
     it("should fetch static tables info successfully", async () => {
       const response = await app.inject({
