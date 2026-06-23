@@ -14,3 +14,4 @@ CREATE TABLE IF NOT EXISTS hand_histories (
 );
 
 CREATE INDEX IF NOT EXISTS idx_hand_histories_table_id ON hand_histories(table_id, hand_number);
+ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE;
