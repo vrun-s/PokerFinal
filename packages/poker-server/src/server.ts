@@ -234,6 +234,8 @@ const io = new Server(httpServer, {
 
 registerSocketHandlers(io);
 
+
+
 async function start() {
   try {
     await initializeDatabaseSchema();
