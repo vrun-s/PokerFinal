@@ -53,6 +53,7 @@ export interface DatabasePlayer {
   readonly name: string;
   readonly password_hash: string;
   readonly balance: number;
+  readonly is_admin: boolean;
 }
 
 export async function createPlayer(
@@ -72,7 +73,7 @@ export async function getPlayerByUsername(
   id: string
 ): Promise<DatabasePlayer | null> {
   const res = await client.query(
-    "SELECT id, name, password_hash, balance FROM players WHERE id = $1",
+    "SELECT id, name, password_hash, balance, is_admin FROM players WHERE id = $1",
     [id]
   );
   if (res.rows.length === 0) return null;
