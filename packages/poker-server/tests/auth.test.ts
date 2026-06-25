@@ -11,10 +11,10 @@ const mockQuery = vi.fn().mockImplementation(async (sql: string, params?: any[])
       (err as any).code = "23505";
       throw err;
     }
-    mockPlayers.set(id, { id, name, password_hash: passwordHash, balance: 10000 });
+    mockPlayers.set(id, { id, name, password_hash: passwordHash, balance: 10000, is_admin: false });
     return { rows: [] };
   }
-  if (sql.includes("SELECT id, name, password_hash, balance FROM players")) {
+  if (sql.includes("FROM players WHERE id = $1") && sql.includes("password_hash")) {
     const id = params && params[0];
     const player = id ? mockPlayers.get(id) : null;
     if (!player) return { rows: [] };
