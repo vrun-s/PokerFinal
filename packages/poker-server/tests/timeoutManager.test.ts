@@ -7,6 +7,9 @@ import {
   handleReconnect,
   getPlayerTimeBank,
   setPlayerTimeBank,
+  startInactivityTimer,
+  clearInactivityTimer,
+  hasInactivityTimer,
 } from "../src/services/timeoutManager.js";
 import { processTableAction } from "../src/services/tableService.js";
 
@@ -52,7 +55,10 @@ describe("Timeout Manager & Time Banks", () => {
     mockRedisStore.clear();
 
     emitMock = vi.fn();
-    inMock = vi.fn().mockReturnValue({ emit: emitMock });
+    inMock = vi.fn().mockReturnValue({
+      emit: emitMock,
+      fetchSockets: vi.fn().mockResolvedValue([]),
+    });
     mockIo = {
       in: inMock,
     } as unknown as Server;
@@ -196,4 +202,125 @@ describe("Timeout Manager & Time Banks", () => {
 
     clearTimer("1");
   });
+
+  describe("Inactivity Eviction Timers", () => {
+    beforeEach(() => {
+      // Reset inactivity timers before each test
+      for (let i = 0; i < 10; i++) {
+        clearInactivityTimer("1", `P${i}`);
+      }
+    });
+
+    it("should manage inactivity timer on manual start and clear calls", () => {
+      startInactivityTimer(mockIo, "1", "P0");
+      expect(hasInactivityTimer("1", "P0")).toBe(true);
+
+      clearInactivityTimer("1", "P0");
+      expect(hasInactivityTimer("1", "P0")).toBe(false);
+    });
+
+    it("should be idempotent (repeated startInactivityTimer calls do not reset the deadline)", async () => {
+      const redisService = await import("../src/services/redisService.js");
+      vi.mocked(redisService.getTableState).mockResolvedValue({
+        seats: [{ playerId: "P0", status: "sitting-out" }],
+        currentHandState: null,
+        handActionSeq: 5
+      } as any);
+
+      startInactivityTimer(mockIo, "1", "P0");
+      // Advance 100 seconds
+      vi.advanceTimersByTime(100 * 1000);
+
+      // Call startInactivityTimer again (should be no-op)
+      startInactivityTimer(mockIo, "1", "P0");
+
+      // Advance remaining 200 seconds (total 300 seconds)
+      vi.advanceTimersByTime(200 * 1000);
+
+      // Wait for async checks
+      await vi.runOnlyPendingTimersAsync();
+
+      // Expect processTableAction to have been called because the timer fired at 300 seconds
+      expect(processTableAction).toHaveBeenCalledWith("1", { type: "leaveTable", playerId: "P0" }, 5);
+    });
+
+    it("should dispatch leaveTable on expiry if player is still inactive", async () => {
+      const redisService = await import("../src/services/redisService.js");
+      vi.mocked(redisService.getTableState).mockResolvedValue({
+        seats: [{ playerId: "P0", status: "sitting-out" }],
+        currentHandState: null,
+        handActionSeq: 5
+      } as any);
+
+      startInactivityTimer(mockIo, "1", "P0");
+      vi.advanceTimersByTime(300 * 1000);
+      await vi.runOnlyPendingTimersAsync();
+
+      expect(processTableAction).toHaveBeenCalledWith("1", { type: "leaveTable", playerId: "P0" }, 5);
+    });
+
+    it("should abort eviction on expiry if player is no longer inactive (e.g., sat back in)", async () => {
+      const redisService = await import("../src/services/redisService.js");
+      vi.mocked(redisService.getTableState).mockResolvedValue({
+        seats: [{ playerId: "P0", status: "occupied" }], // occupied, not sitting-out
+        currentHandState: null,
+        handActionSeq: 5
+      } as any);
+
+      // Sockets are connected
+      mockIo.in = vi.fn().mockReturnValue({
+        fetchSockets: vi.fn().mockResolvedValue([{ id: "socket-1" }]),
+      });
+
+      startInactivityTimer(mockIo, "1", "P0");
+      vi.advanceTimersByTime(300 * 1000);
+      await vi.runOnlyPendingTimersAsync();
+
+      expect(processTableAction).not.toHaveBeenCalledWith("1", { type: "leaveTable", playerId: "P0" }, expect.any(Number));
+    });
+
+    it("should start inactivity timer on disconnect if player is not active actor", async () => {
+      const redisService = await import("../src/services/redisService.js");
+      vi.mocked(redisService.getTableState).mockResolvedValue({
+        seats: [{ playerId: "P0", status: "occupied" }],
+        currentHandState: {
+          players: [{ id: "P0" }, { id: "P1" }],
+          actorIndex: 1, // active actor is P1, not P0
+          currentRound: "PreFlop"
+        },
+        handActionSeq: 5
+      } as any);
+
+      await handleDisconnect(mockIo, "1", "P0");
+      expect(hasInactivityTimer("1", "P0")).toBe(true);
+    });
+
+    it("should clear inactivity timer on reconnect if player is not sitting out", async () => {
+      const redisService = await import("../src/services/redisService.js");
+      // Initially sitting out, timer starts
+      vi.mocked(redisService.getTableState).mockResolvedValue({
+        seats: [{ playerId: "P0", status: "sitting-out" }],
+        currentHandState: null,
+        handActionSeq: 5
+      } as any);
+
+      startInactivityTimer(mockIo, "1", "P0");
+      expect(hasInactivityTimer("1", "P0")).toBe(true);
+
+      // Reconnects while still sitting out -> should NOT clear timer
+      await handleReconnect(mockIo, "1", "P0");
+      expect(hasInactivityTimer("1", "P0")).toBe(true);
+
+      // Sits back in (status occupied) and reconnects -> should clear timer
+      vi.mocked(redisService.getTableState).mockResolvedValue({
+        seats: [{ playerId: "P0", status: "occupied" }],
+        currentHandState: null,
+        handActionSeq: 5
+      } as any);
+
+      await handleReconnect(mockIo, "1", "P0");
+      expect(hasInactivityTimer("1", "P0")).toBe(false);
+    });
+  });
 });
+

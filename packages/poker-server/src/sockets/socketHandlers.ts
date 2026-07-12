@@ -7,6 +7,8 @@ import {
   handleDisconnect,
   handleReconnect,
   syncTimerForTableState,
+  startInactivityTimer,
+  clearInactivityTimer,
 } from "../services/timeoutManager.js";
 import crypto from "crypto";
 import { logger } from "../services/logger.js";
@@ -95,7 +97,9 @@ export function registerSocketHandlers(io: Server) {
       logger.info({ tableId, playerId }, "Player subscribed to table room");
 
       // Handle timer reconnect grace period resume
-      handleReconnect(io, tableId, playerId);
+      await handleReconnect(io, tableId, playerId).catch((err: any) => {
+        logger.error({ tableId, playerId, error: err.message }, "Error in handleReconnect during subscription");
+      });
 
       const state = await getTableState(tableId);
       if (state) {
@@ -211,16 +215,25 @@ export function registerSocketHandlers(io: Server) {
             }
           }
         }
+
+        // Handle inactivity timers for manual actions
+        if (action.type === "sitOut") {
+          startInactivityTimer(io, tableId, action.playerId);
+        } else if (action.type === "sitIn" || action.type === "leaveTable") {
+          clearInactivityTimer(tableId, action.playerId);
+        }
       }
     });
 
     // 4. Client disconnect
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       const { tableId, playerId } = socket.data;
       if (tableId && playerId) {
         logger.info({ tableId, playerId }, "Player disconnected");
         // Trigger grace pause if they were the active actor
-        handleDisconnect(io, tableId, playerId);
+        await handleDisconnect(io, tableId, playerId).catch((err: any) => {
+          logger.error({ tableId, playerId, error: err.message }, "Error handling disconnect");
+        });
       }
     });
   });

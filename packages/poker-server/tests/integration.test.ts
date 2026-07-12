@@ -378,4 +378,52 @@ describe("Socket Server Integration", () => {
       expect(response.statusCode).toBe(429);
     });
   });
+
+  describe("Inactivity Eviction Socket integration", () => {
+    it("should start the inactivity timer when a client manually sits out", () => {
+      const token = generatePlayerToken("P0");
+      const client = ClientIO(`http://localhost:${port}`, { autoConnect: false });
+
+      return new Promise<void>((resolve, reject) => {
+        client.connect();
+        client.on("connect", () => {
+          client.emit("subscribe_table", { tableId: "2", token });
+        });
+
+        client.on("table_state", (state: any) => {
+          if (state.handActionSeq === 0) {
+            // Join first
+            client.emit("join_table", {
+              tableId: "2",
+              token,
+              name: "Alice",
+              buyIn: 500,
+              seatIndex: 0,
+              handActionSeq: 0,
+            });
+          } else if (state.handActionSeq === 1) {
+            // Sit out
+            client.emit("game_action", {
+              tableId: "2",
+              playerId: "P0",
+              action: { type: "sitOut", playerId: "P0" },
+              handActionSeq: 1,
+            });
+          } else if (state.handActionSeq === 2) {
+            // Verify inactivity timer is running
+            import("../src/services/timeoutManager.js").then(({ hasInactivityTimer }) => {
+              try {
+                expect(hasInactivityTimer("2", "P0")).toBe(true);
+                client.disconnect();
+                resolve();
+              } catch (err) {
+                client.disconnect();
+                reject(err);
+              }
+            });
+          }
+        });
+      });
+    });
+  });
 });

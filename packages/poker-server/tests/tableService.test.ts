@@ -19,7 +19,7 @@ vi.mock("../src/services/redisService.js", () => {
 vi.mock("../src/services/postgresService.js", () => {
   return {
     executeTransaction: vi.fn().mockImplementation(async (cb) => {
-      return cb({});
+      return cb({} as any);
     }),
     deductPlayerBalance: vi.fn(),
     creditPlayerBalance: vi.fn(),
@@ -208,4 +208,72 @@ describe("tableService - processTableAction timeout resolution", () => {
     const savedState = mockSaveTableState.mock.calls[0][1];
     expect(savedState.failedJoins).toBeUndefined();
   });
+
+  describe("processTableAction - ordering & Redis failure resilience", () => {
+    let mockState: TableState;
+
+    beforeEach(() => {
+      mockState = {
+        config: { maxSeats: 6, minBuyIn: 100, maxBuyIn: 1000, smallBlind: 10, bigBlind: 20 },
+        seats: [
+          { index: 0, playerId: "P0", name: "Alice", stack: 1000, status: "occupied", mustWaitForBB: false },
+        ],
+        dealerIndex: 0,
+        handCount: 1,
+        pendingJoins: [],
+        pendingLeaves: [],
+        handActionSeq: 5,
+        lastBBSeatIdx: null,
+        currentHandState: null,
+      };
+      mockGetTableState.mockResolvedValue(mockState);
+    });
+
+    it("should fail the action and leave Redis untouched if commit fails", async () => {
+      const { executeTransaction } = await import("../src/services/postgresService.js");
+      vi.mocked(executeTransaction).mockImplementationOnce(async (cb) => {
+        await cb({} as any);
+        throw new Error("commit failed");
+      });
+
+      const result = await processTableAction("table-1", { type: "sitOut", playerId: "P0" }, 5);
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("commit failed");
+      expect(mockSaveTableState).not.toHaveBeenCalled();
+      expect(mockPublishTableUpdate).not.toHaveBeenCalled();
+    });
+
+    it("should succeed and log error if Redis write fails after a successful commit", async () => {
+      mockSaveTableState.mockRejectedValueOnce(new Error("Redis save failed"));
+
+      const result = await processTableAction("table-1", { type: "sitOut", playerId: "P0" }, 5);
+      expect(result.success).toBe(true);
+      expect(result.state.seats[0].status).toBe("sitting-out");
+      expect(mockSaveTableState).toHaveBeenCalled();
+    });
+
+    it("should execute Redis save and publish only after Postgres transaction commits", async () => {
+      const { executeTransaction } = await import("../src/services/postgresService.js");
+      const callOrder: string[] = [];
+
+      vi.mocked(executeTransaction).mockImplementationOnce(async (cb) => {
+        callOrder.push("db-start");
+        const res = await cb({} as any);
+        callOrder.push("db-end");
+        return res;
+      });
+
+      mockSaveTableState.mockImplementationOnce(async () => {
+        callOrder.push("redis-save");
+      });
+      mockPublishTableUpdate.mockImplementationOnce(async () => {
+        callOrder.push("redis-publish");
+      });
+
+      const result = await processTableAction("table-1", { type: "sitOut", playerId: "P0" }, 5);
+      expect(result.success).toBe(true);
+      expect(callOrder).toEqual(["db-start", "db-end", "redis-save", "redis-publish"]);
+    });
+  });
 });
+

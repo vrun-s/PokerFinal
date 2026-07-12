@@ -19,8 +19,10 @@ export async function processTableAction(
   action: TableAction | { readonly type: "timeout"; readonly playerId: string },
   clientHandActionSeq: number
 ): Promise<{ success: boolean; state: TableState; error?: string }> {
+  let nextState: TableState;
+
   try {
-    return await executeTransaction(async (client) => {
+    nextState = await executeTransaction(async (client) => {
       const state = await getTableState(tableId);
       if (!state) {
         throw new Error("Table not found");
@@ -76,11 +78,16 @@ export async function processTableAction(
       }
 
       // 2. Execute the pure table reducer
-      const nextState = tableReducer(state, processedAction);
+      let computedState = tableReducer(state, processedAction);
 
-      // If nextState is identical reference, the reducer rejected the action as invalid
-      if (nextState === state) {
+      // If computedState is identical reference, the reducer rejected the action as invalid
+      if (computedState === state) {
         throw new Error("Invalid action according to table rules");
+      }
+
+      // Chain auto-sitOut after a turn timeout resolves to fold/check
+      if (action.type === "timeout") {
+        computedState = tableReducer(computedState, { type: "sitOut", playerId: action.playerId });
       }
 
       // 3. Process cash-outs (credits) for players leaving the table
@@ -88,7 +95,7 @@ export async function processTableAction(
         // Compare seats to identify who left immediately (when table is idle)
         for (let i = 0; i < state.seats.length; i++) {
           const oldSeat = state.seats[i]!;
-          const newSeat = nextState.seats[i]!;
+          const newSeat = computedState.seats[i]!;
           if (oldSeat.playerId !== null && newSeat.playerId === null) {
             await creditPlayerBalance(client, oldSeat.playerId, oldSeat.stack);
           }
@@ -107,8 +114,8 @@ export async function processTableAction(
         }
 
         // Refund any joins that failed to secure a seat
-        if (nextState.failedJoins) {
-          for (const join of nextState.failedJoins) {
+        if (computedState.failedJoins) {
+          for (const join of computedState.failedJoins) {
             await creditPlayerBalance(client, join.playerId, join.buyIn);
             logger.warn(
               { tableId, playerId: join.playerId, buyIn: join.buyIn },
@@ -123,12 +130,7 @@ export async function processTableAction(
         }
       }
 
-      // Commit changes to Redis cache
-      const { failedJoins, ...stateToCache } = nextState;
-      await saveTableState(tableId, stateToCache);
-      await publishTableUpdate(tableId);
-      logger.info({ tableId, action: action.type, playerId: (action as any).playerId }, "Action processed successfully");
-      return { success: true, state: nextState };
+      return computedState;
     });
   } catch (error: any) {
     logger.error({ tableId, action: action.type, playerId: (action as any).playerId, error: error.message }, "Action failed");
@@ -140,4 +142,24 @@ export async function processTableAction(
       error: error.message || "Action failed",
     };
   }
+
+  // Postgres has committed at this point — this action is authoritatively successful.
+  // The database is the source of truth for balances/chips; Redis is a cache/broadcast layer.
+  try {
+    const { failedJoins, ...stateToCache } = nextState;
+    await saveTableState(tableId, stateToCache);
+    await publishTableUpdate(tableId);
+  } catch (cacheError: any) {
+    // CRITICAL: Do NOT report failure to the caller here!
+    // Since the database transaction committed successfully, the money/action has already been
+    // applied. Reporting success: false here would lead callers to retry the operation, which
+    // would result in double-deductions or invalid action sequence issues.
+    logger.error(
+      { tableId, action: action.type, error: cacheError.message },
+      "CRITICAL_REDIS_SYNC_FAILURE: Postgres committed but Redis cache/broadcast write failed; state is stale until next write"
+    );
+  }
+
+  logger.info({ tableId, action: action.type, playerId: (action as any).playerId }, "Action processed successfully");
+  return { success: true, state: nextState };
 }
